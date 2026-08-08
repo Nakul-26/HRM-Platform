@@ -4,6 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
   "compatibility_flags": ["nodejs_compat"],
+  "dev": { "port": 8789 },
   "vars": {
     "JWT_KID": "default",
     "S3_BUCKET": "hrm-documents"

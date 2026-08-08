@@ -1,0 +1,6 @@
+# Copy to .dev.vars for local `wrangler dev` — auto-loaded by Wrangler,
+# never committed (docs/architecture/06-security.md, "Secrets management").
+JWT_SIGNING_KEY=replace-with-a-real-32-plus-character-secret
+S3_ENDPOINT=http://localhost:9000
+S3_ACCESS_KEY_ID=minioadmin
+S3_SECRET_ACCESS_KEY=minioadmin

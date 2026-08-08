@@ -67,12 +67,14 @@ describe("employee-service", () => {
       name: "Employee Service Test Tenant A",
       adminEmail: `admin-a-${suffix}@test.local`,
       adminName: "Admin A",
+      adminPassword: "Test-Password-123",
     });
     tenantB = await createTenant(adminDb, {
       slug: `emp-svc-b-${suffix}`,
       name: "Employee Service Test Tenant B",
       adminEmail: `admin-b-${suffix}@test.local`,
       adminName: "Admin B",
+      adminPassword: "Test-Password-123",
     });
 
     const [admin] = await adminDb
@@ -148,6 +150,8 @@ describe("employee-service", () => {
     const tenantIds = [tenantA.id, tenantB.id];
     await adminDb.delete(schema.employeeDocuments).where(inArray(schema.employeeDocuments.tenantId, tenantIds));
     await adminDb.delete(schema.employees).where(inArray(schema.employees.tenantId, tenantIds));
+    await adminDb.delete(schema.accounts).where(inArray(schema.accounts.tenantId, tenantIds));
+    await adminDb.delete(schema.users).where(inArray(schema.users.tenantId, tenantIds));
     await adminDb.delete(schema.departments).where(inArray(schema.departments.tenantId, tenantIds));
     await adminDb.delete(schema.branches).where(inArray(schema.branches.tenantId, tenantIds));
     await adminDb.delete(schema.designations).where(inArray(schema.designations.tenantId, tenantIds));

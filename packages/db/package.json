@@ -20,6 +20,7 @@
   "dependencies": {
     "@hrm/config": "workspace:*",
     "@hrm/types": "workspace:*",
+    "better-auth": "^1.1.0",
     "drizzle-orm": "^0.38.0",
     "postgres": "^3.4.5"
   },

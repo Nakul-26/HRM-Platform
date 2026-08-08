@@ -7,6 +7,21 @@ declare module "hono" {
 }
 
 /**
+ * Pure host -> tenant-slug parsing, shared by the `tenantResolution`
+ * middleware (used by every proxied route) and the login route (which needs
+ * the slug immediately, before jwtAuth or any general middleware chain
+ * ordering, since there is no token yet to hang a `next()` chain off of).
+ */
+export function resolveTenantSlugFromHost(host: string, rootDomain: string): string | null {
+  const hostWithoutPort = host.split(":")[0] ?? "";
+  if (!hostWithoutPort.endsWith(`.${rootDomain}`)) return null;
+
+  const slug = hostWithoutPort.slice(0, -(rootDomain.length + 1));
+  if (!slug || slug.includes(".")) return null;
+  return slug;
+}
+
+/**
  * Resolves the tenant from the request's subdomain (docs/architecture/03-multi-tenancy.md).
  * Runs before auth verification — everything downstream (rate limiting keys,
  * auth context validation) needs to know which tenant it's operating in.
@@ -16,20 +31,10 @@ declare module "hono" {
  */
 export function tenantResolution(rootDomain: string): MiddlewareHandler {
   return async (c, next) => {
-    const host = c.req.header("host") ?? "";
-    const hostWithoutPort = host.split(":")[0] ?? "";
-
-    if (!hostWithoutPort.endsWith(`.${rootDomain}`)) {
+    const slug = resolveTenantSlugFromHost(c.req.header("host") ?? "", rootDomain);
+    if (!slug) {
       return c.json(
         { error: { code: "TENANT_NOT_RESOLVED", message: "Request host is not a recognized tenant domain" }, requestId: c.get("requestId") },
-        400,
-      );
-    }
-
-    const slug = hostWithoutPort.slice(0, -(rootDomain.length + 1));
-    if (!slug || slug.includes(".")) {
-      return c.json(
-        { error: { code: "TENANT_NOT_RESOLVED", message: "Could not extract a tenant slug from host" }, requestId: c.get("requestId") },
         400,
       );
     }

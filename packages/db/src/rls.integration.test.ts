@@ -3,7 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 import { loadEnv, baseEnvSchema } from "@hrm/config";
 import { createDbClient, withTenant, type Database } from "./client";
 import { createTenant } from "./onboarding";
-import { departments, rolePermissions, roles, tenants } from "./schema/index";
+import { accounts, departments, employees, rolePermissions, roles, tenants, users } from "./schema/index";
 
 /**
  * The blocking Phase 0 test (docs/architecture/10-roadmap.md): proves tenant
@@ -35,12 +35,14 @@ describe("row-level security: cross-tenant isolation", () => {
       name: "RLS Test Tenant A",
       adminEmail: `admin-a-${suffix}@test.local`,
       adminName: "Admin A",
+      adminPassword: "Test-Password-123",
     });
     tenantB = await createTenant(adminDb, {
       slug: `rls-test-b-${suffix}`,
       name: "RLS Test Tenant B",
       adminEmail: `admin-b-${suffix}@test.local`,
       adminName: "Admin B",
+      adminPassword: "Test-Password-123",
     });
 
     const [deptA] = await adminDb
@@ -58,6 +60,9 @@ describe("row-level security: cross-tenant isolation", () => {
 
   afterAll(async () => {
     const tenantIds = [tenantA.id, tenantB.id];
+    await adminDb.delete(employees).where(inArray(employees.tenantId, tenantIds));
+    await adminDb.delete(accounts).where(inArray(accounts.tenantId, tenantIds));
+    await adminDb.delete(users).where(inArray(users.tenantId, tenantIds));
     await adminDb.delete(departments).where(inArray(departments.tenantId, tenantIds));
     await adminDb.delete(rolePermissions).where(
       inArray(

@@ -20,6 +20,7 @@ export type Tenant = z.infer<typeof tenantSchema>;
 export const createTenantSchema = tenantSchema.pick({ slug: true, name: true }).extend({
   adminEmail: z.string().email(),
   adminName: z.string().min(1).max(200),
+  adminPassword: z.string().min(8).max(200),
 });
 export type CreateTenantInput = z.infer<typeof createTenantSchema>;
 

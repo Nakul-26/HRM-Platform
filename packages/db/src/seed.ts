@@ -52,6 +52,7 @@ async function main() {
         name: "Demo Org",
         adminEmail: "admin@demo.local",
         adminName: "Demo Admin",
+        adminPassword: "DemoPass123!",
       });
       console.log(`Created tenant '${tenant.subdomain}' (${tenant.id})`);
     }
