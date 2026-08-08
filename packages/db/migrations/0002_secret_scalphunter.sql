@@ -1,0 +1,1 @@
+ALTER TABLE "leave_balances" ADD COLUMN "last_accrual_period" text;

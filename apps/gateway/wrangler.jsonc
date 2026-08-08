@@ -11,7 +11,8 @@
     // Local dev only — apps/web talks to this Gateway, which forwards to
     // these. Not secrets, so safe to commit (docs/architecture/06-security.md).
     "EMPLOYEE_SERVICE_URL": "http://localhost:8788",
-    "DOCUMENT_SERVICE_URL": "http://localhost:8789"
+    "DOCUMENT_SERVICE_URL": "http://localhost:8789",
+    "LEAVE_SERVICE_URL": "http://localhost:8790"
   }
   // Secrets (JWT_SIGNING_KEY, APP_DATABASE_URL) are set via `wrangler secret
   // put` in deployed environments and via `.dev.vars` locally (see

@@ -8,6 +8,9 @@ const NAV_ITEMS = [
   { href: "/departments", label: "Departments" },
   { href: "/branches", label: "Branches" },
   { href: "/designations", label: "Designations" },
+  { href: "/leave/types", label: "Leave Types" },
+  { href: "/leave/holidays", label: "Holidays" },
+  { href: "/leave/approvals", label: "Leave Approvals" },
   { href: "/directory", label: "Directory" },
   { href: "/profile", label: "My Profile" },
 ];

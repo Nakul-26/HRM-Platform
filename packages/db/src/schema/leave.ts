@@ -30,6 +30,10 @@ export const leaveBalances = pgTable(
     entitled: numeric("entitled", { precision: 6, scale: 2 }).notNull().default("0"),
     used: numeric("used", { precision: 6, scale: 2 }).notNull().default("0"),
     carriedForward: numeric("carried_forward", { precision: 6, scale: 2 }).notNull().default("0"),
+    // e.g. "2026-08" for a monthly accrual rule, "2026" for yearly — lets the
+    // accrual job tell whether this period was already applied, so re-running
+    // it (cron firing twice, or a manual trigger) never double-accrues.
+    lastAccrualPeriod: text("last_accrual_period"),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.tenantId, table.employeeId, table.leaveTypeId, table.year] }),
@@ -56,6 +60,10 @@ export const leaveRequests = pgTable(
     status: text("status").notNull().default("pending"), // pending | approved | rejected | cancelled
     approverId: uuid("approver_id").references(() => employees.id),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
+    // The approver's own note (e.g. why a request was rejected) — kept
+    // separate from `reason` (the applicant's own stated reason) so
+    // deciding a request never overwrites what the applicant originally wrote.
+    decisionNote: text("decision_note"),
     ...timestamps,
   },
   (table) => ({

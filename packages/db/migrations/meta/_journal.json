@@ -15,6 +15,20 @@
       "when": 1786183254265,
       "tag": "0001_certain_leper_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786204766259,
+      "tag": "0002_secret_scalphunter",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786206480156,
+      "tag": "0003_big_blockbuster",
+      "breakpoints": true
     }
   ]
 }

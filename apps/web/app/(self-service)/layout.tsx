@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 
 const NAV_ITEMS = [
   { href: "/profile", label: "My Profile" },
+  { href: "/leave", label: "My Leave" },
   { href: "/directory", label: "Directory" },
 ];
 

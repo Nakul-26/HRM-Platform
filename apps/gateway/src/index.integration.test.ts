@@ -23,6 +23,7 @@ describe("gateway: signup, login, proxying", () => {
     JWT_KID: env.JWT_KID,
     EMPLOYEE_SERVICE_URL: "http://employee-service.test",
     DOCUMENT_SERVICE_URL: "http://document-service.test",
+    LEAVE_SERVICE_URL: "http://leave-service.test",
   };
 
   let adminDb: Database;
@@ -165,6 +166,33 @@ describe("gateway: signup, login, proxying", () => {
     const forwardedRequest = fetchSpy.mock.calls[0]?.[0] as Request;
     expect(forwardedRequest.url).toBe("http://employee-service.test/api/v1/employees?page=1");
     expect(forwardedRequest.headers.get("authorization")).toBe(`Bearer ${data.token}`);
+
+    fetchSpy.mockRestore();
+  });
+
+  it("proxies an authenticated request to the leave-service with the bearer token intact", async () => {
+    const s = slug("hooli");
+    const email = `admin@${s}.test`;
+    await signup({ slug: s, name: "Hooli", adminEmail: email, adminName: "Gavin Admin", adminPassword: "tres-comas-1" });
+    const loginRes = await login(`${s}.${ROOT_DOMAIN}`, { email, password: "tres-comas-1" });
+    const { data } = (await loginRes.json()) as { data: { token: string } };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: [], requestId: "mock" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const res = await app.request(
+      "/api/v1/leave/requests",
+      { headers: { authorization: `Bearer ${data.token}`, host: `${s}.${ROOT_DOMAIN}` } },
+      testEnv,
+    );
+
+    expect(res.status).toBe(200);
+    const forwardedRequest = fetchSpy.mock.calls[0]?.[0] as Request;
+    expect(forwardedRequest.url).toBe("http://leave-service.test/api/v1/leave/requests");
 
     fetchSpy.mockRestore();
   });

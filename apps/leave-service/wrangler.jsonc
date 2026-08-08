@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hrm-leave-service",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": { "port": 8790 },
+  "vars": {
+    "JWT_KID": "default"
+  },
+  // Monthly leave accrual (docs/architecture/10-roadmap.md, Phase 2) — runs
+  // at 00:00 UTC on the 1st of every month. src/lib/accrual.ts is idempotent
+  // per (employee, leave type, period), so a missed/retried tick is safe.
+  // POST /api/v1/leave/balances/accrual/run exists for manual/test triggering
+  // without waiting on the schedule.
+  "triggers": {
+    "crons": ["0 0 1 * *"]
+  }
+  // Secrets (JWT_SIGNING_KEY, APP_DATABASE_URL) are set via `wrangler secret
+  // put`, never committed here — see docs/architecture/06-security.md.
+  // Production wiring goes through a Hyperdrive binding rather than a raw
+  // connection string once one exists to point at:
+  // "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<hyperdrive-id>" }]
+}
