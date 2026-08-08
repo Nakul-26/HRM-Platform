@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hrm-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "JWT_KID": "default"
+  }
+  // Secrets (JWT_SIGNING_KEY, etc.) are set via `wrangler secret put`, never
+  // committed here — see docs/architecture/06-security.md, "Secrets management".
+  // Hyperdrive binding is added once a Postgres instance exists to point at:
+  // "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<hyperdrive-id>" }]
+}
