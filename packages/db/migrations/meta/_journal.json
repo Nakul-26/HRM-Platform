@@ -29,6 +29,13 @@
       "when": 1786206480156,
       "tag": "0003_big_blockbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786292433747,
+      "tag": "0004_closed_meteorite",
+      "breakpoints": true
     }
   ]
 }

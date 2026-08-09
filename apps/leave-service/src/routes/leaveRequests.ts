@@ -7,9 +7,9 @@ import type { Env } from "../env";
 import { getDb } from "../db";
 import { fail, forbidden, notFound, ok, okList } from "../lib/response";
 import { countTotal, parsePagination, parseSort } from "../lib/pagination";
-import { calculateLeaveDays } from "../lib/leaveDays";
+import { calculateLeaveDays, enumerateBusinessDays } from "../lib/leaveDays";
 
-const { leaveRequests, leaveTypes, leaveBalances, employees, holidayCalendar } = schema;
+const { leaveRequests, leaveTypes, leaveBalances, employees, holidayCalendar, attendanceRecords } = schema;
 
 type AppContext = Context<{ Bindings: Env }>;
 
@@ -118,6 +118,34 @@ async function decide(c: AppContext, targetStatus: "approved" | "rejected") {
           year: new Date(`${existing.request.startDate}T00:00:00Z`).getUTCFullYear(),
           used: String(existing.request.days),
         });
+      }
+
+      // Phase 2 DoD (docs/architecture/10-roadmap.md): an approved leave
+      // request must be reflected in attendance without manual
+      // reconciliation. Reuses the same weekday+holiday-exclusion logic as
+      // the days count above so the two can never disagree on which dates
+      // count. Only `status` is touched on conflict — if the employee
+      // already had a clock-in that day (e.g. leave approved after the
+      // fact), their recorded times aren't clobbered.
+      const holidaysInRange = await tx
+        .select({ date: holidayCalendar.date })
+        .from(holidayCalendar)
+        .where(and(gte(holidayCalendar.date, existing.request.startDate), lte(holidayCalendar.date, existing.request.endDate)));
+      const coveredDates = enumerateBusinessDays(existing.request.startDate, existing.request.endDate, holidaysInRange);
+      for (const workDate of coveredDates) {
+        await tx
+          .insert(attendanceRecords)
+          .values({
+            tenantId: auth.tenantId,
+            employeeId: existing.request.employeeId,
+            workDate,
+            source: "manual",
+            status: "on_leave",
+          })
+          .onConflictDoUpdate({
+            target: [attendanceRecords.tenantId, attendanceRecords.employeeId, attendanceRecords.workDate],
+            set: { status: "on_leave", updatedAt: new Date() },
+          });
       }
     }
 

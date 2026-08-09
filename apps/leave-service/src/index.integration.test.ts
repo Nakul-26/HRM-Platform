@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { loadEnv, baseEnvSchema } from "@hrm/config";
 import { createDbClient, createTenant, schema, type Database } from "@hrm/db";
 import { signAccessToken } from "@hrm/auth";
 import { PERMISSIONS, type AuthContext, type Permission } from "@hrm/types";
 import { app } from "./index";
+import { enumerateBusinessDays } from "./lib/leaveDays";
 
 /**
  * Exercises the full HTTP surface of the leave-service against a real
@@ -194,6 +195,7 @@ describe("leave-service", () => {
 
   afterAll(async () => {
     const tenantIds = [tenantA.id, tenantB.id];
+    await adminDb.delete(schema.attendanceRecords).where(inArray(schema.attendanceRecords.tenantId, tenantIds));
     await adminDb.delete(schema.leaveRequests).where(inArray(schema.leaveRequests.tenantId, tenantIds));
     await adminDb.delete(schema.leaveBalances).where(inArray(schema.leaveBalances.tenantId, tenantIds));
     await adminDb.delete(schema.leaveTypes).where(inArray(schema.leaveTypes.tenantId, tenantIds));
@@ -528,6 +530,40 @@ describe("leave-service", () => {
       const listB = await req("GET", "/api/v1/leave/balances", adminB);
       const dataB = ((await listB.json()) as { data: unknown[] }).data;
       expect(dataB).toHaveLength(0); // tenant B has no accruable leave types of its own
+    });
+  });
+
+  describe("leave -> attendance reconciliation", () => {
+    it("creates attendance_records rows with status on_leave for each covered business day after approval (Phase 2 DoD: no manual reconciliation)", async () => {
+      const applicant = authFor({ employeeId: otherEmployeeA.id, permissions: ["leave.apply"] });
+      const admin = authFor({ employeeId: adminEmployeeA.id, permissions: ["leave.approve_all"] });
+
+      const startDate = iso(nextWeekday(new Date(), 80));
+      const endDate = iso(addWeekdays(new Date(startDate), 2)); // 3 business days total
+
+      const res = await req("POST", "/api/v1/leave/requests", applicant, {
+        leaveTypeId: unpaidLeaveTypeA.id,
+        startDate,
+        endDate,
+      });
+      expect(res.status).toBe(201);
+      const created = ((await res.json()) as { data: { id: string; days: number } }).data;
+      expect(created.days).toBe(3);
+
+      const approved = await req("PATCH", `/api/v1/leave/requests/${created.id}/approve`, admin);
+      expect(approved.status).toBe(200);
+
+      const records = await adminDb
+        .select()
+        .from(schema.attendanceRecords)
+        .where(and(eq(schema.attendanceRecords.tenantId, tenantA.id), eq(schema.attendanceRecords.employeeId, otherEmployeeA.id)));
+
+      const coveredDates = enumerateBusinessDays(startDate, endDate);
+      expect(coveredDates).toHaveLength(3);
+      for (const date of coveredDates) {
+        const record = records.find((r) => r.workDate === date);
+        expect(record?.status).toBe("on_leave");
+      }
     });
   });
 

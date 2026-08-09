@@ -7,4 +7,5 @@ export interface Env extends AuthMiddlewareEnv {
   EMPLOYEE_SERVICE_URL: string;
   DOCUMENT_SERVICE_URL: string;
   LEAVE_SERVICE_URL: string;
+  ATTENDANCE_SERVICE_URL: string;
 }

@@ -11,6 +11,9 @@ const NAV_ITEMS = [
   { href: "/leave/types", label: "Leave Types" },
   { href: "/leave/holidays", label: "Holidays" },
   { href: "/leave/approvals", label: "Leave Approvals" },
+  { href: "/attendance/shifts", label: "Shift Templates" },
+  { href: "/attendance/shift-assignments", label: "Shift Assignments" },
+  { href: "/attendance/corrections", label: "Attendance Corrections" },
   { href: "/directory", label: "Directory" },
   { href: "/profile", label: "My Profile" },
 ];

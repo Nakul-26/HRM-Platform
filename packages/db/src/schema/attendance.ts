@@ -65,3 +65,29 @@ export const attendanceRecords = pgTable(
     tenantDateIdx: index("idx_attendance_tenant_date").on(table.tenantId, table.workDate),
   }),
 );
+
+/**
+ * Employee-initiated request to correct a day's attendance (missed clock-in/out,
+ * wrong status, etc.) — approved via the same permission-scoped decide() pattern
+ * as leave requests (`attendance.correct` / `attendance.correct_all`), never by
+ * directly editing `attendanceRecords`.
+ */
+export const attendanceCorrections = pgTable("attendance_corrections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id),
+  employeeId: uuid("employee_id")
+    .notNull()
+    .references(() => employees.id),
+  workDate: date("work_date").notNull(),
+  requestedClockIn: timestamp("requested_clock_in", { withTimezone: true }),
+  requestedClockOut: timestamp("requested_clock_out", { withTimezone: true }),
+  requestedStatus: text("requested_status"), // present | absent | half_day
+  reason: text("reason"),
+  status: text("status").notNull().default("pending"), // pending | approved | rejected | cancelled
+  approverId: uuid("approver_id").references(() => employees.id),
+  decisionNote: text("decision_note"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  ...timestamps,
+});

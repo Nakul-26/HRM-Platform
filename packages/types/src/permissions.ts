@@ -17,6 +17,9 @@ export const PERMISSIONS = [
   "attendance.read_all",
   "attendance.correct",
   "attendance.correct_all",
+  "attendance.clock",
+  "attendance.request_correction",
+  "attendance.shift.manage",
   "leave.apply",
   "leave.approve",
   "leave.approve_all",
@@ -47,6 +50,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, readonly Permission[]
     "department.manage",
     "attendance.read_all",
     "attendance.correct_all",
+    "attendance.shift.manage",
     "leave.approve_all",
     "leave.policy.manage",
     "payroll.run",
@@ -59,6 +63,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, readonly Permission[]
     "employee.read",
     "attendance.read",
     "attendance.correct",
+    "attendance.clock",
+    "attendance.request_correction",
     "leave.apply",
     "leave.approve",
     "performance.review",
@@ -67,5 +73,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, readonly Permission[]
   // edit their own contact details via self-service — `can()` (see
   // packages/auth/src/rbac.ts) restricts non-`_all` grants to isSelf/
   // isDirectReport, so this never lets a plain employee write anyone else's record.
-  employee: ["employee.read", "employee.write", "attendance.read", "leave.apply"],
+  employee: [
+    "employee.read",
+    "employee.write",
+    "attendance.read",
+    "attendance.clock",
+    "attendance.request_correction",
+    "leave.apply",
+  ],
 };
