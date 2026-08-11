@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { href: "/profile", label: "My Profile" },
   { href: "/attendance", label: "Attendance" },
   { href: "/leave", label: "My Leave" },
+  { href: "/payroll", label: "Payslips" },
   { href: "/directory", label: "Directory" },
 ];
 

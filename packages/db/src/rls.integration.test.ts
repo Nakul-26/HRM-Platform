@@ -3,7 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 import { loadEnv, baseEnvSchema } from "@hrm/config";
 import { createDbClient, withTenant, type Database } from "./client";
 import { createTenant } from "./onboarding";
-import { accounts, departments, employees, rolePermissions, roles, tenants, users } from "./schema/index";
+import { accounts, departments, employees, payrollTaxConfig, rolePermissions, roles, tenants, users } from "./schema/index";
 
 /**
  * The blocking Phase 0 test (docs/architecture/10-roadmap.md): proves tenant
@@ -60,6 +60,7 @@ describe("row-level security: cross-tenant isolation", () => {
 
   afterAll(async () => {
     const tenantIds = [tenantA.id, tenantB.id];
+    await adminDb.delete(payrollTaxConfig).where(inArray(payrollTaxConfig.tenantId, tenantIds));
     await adminDb.delete(employees).where(inArray(employees.tenantId, tenantIds));
     await adminDb.delete(accounts).where(inArray(accounts.tenantId, tenantIds));
     await adminDb.delete(users).where(inArray(users.tenantId, tenantIds));

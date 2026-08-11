@@ -26,6 +26,7 @@ const PERMISSION_DESCRIPTIONS: Record<string, string> = {
   "payroll.run": "Trigger a payroll run",
   "payroll.view": "View one's own payslips",
   "payroll.view_all": "View any employee's payslips",
+  "payroll.structure.manage": "Manage pay component types, salary structures, and tax configuration",
   "recruitment.manage": "Manage job openings, candidates, interviews",
   "performance.review": "Submit reviews for direct reports",
   "performance.review_all": "Submit reviews for any employee",

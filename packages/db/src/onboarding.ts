@@ -2,7 +2,18 @@ import { hashPassword } from "better-auth/crypto";
 import { DEFAULT_ROLE_PERMISSIONS, DEFAULT_ROLES, type CreateTenantInput } from "@hrm/types";
 import type { Database } from "./client";
 import { withTenant } from "./client";
-import { accounts, employees, roles, rolePermissions, tenants, users } from "./schema/index";
+import { accounts, employees, payrollTaxConfig, roles, rolePermissions, tenants, users } from "./schema/index";
+
+// New-regime-style India income-tax slabs (see packages/db/src/schema/payroll.ts's caveat on
+// statutory accuracy). ₹ amounts, annual.
+const DEFAULT_TAX_SLABS = [
+  { upTo: 300_000, rate: 0 },
+  { upTo: 700_000, rate: 0.05 },
+  { upTo: 1_000_000, rate: 0.1 },
+  { upTo: 1_200_000, rate: 0.15 },
+  { upTo: 1_500_000, rate: 0.2 },
+  { upTo: null, rate: 0.3 },
+];
 
 /**
  * Creates a tenant plus its four system default roles (pre-wired with the
@@ -70,6 +81,8 @@ export async function createTenant(db: Database, input: CreateTenantInput) {
       accountId: input.adminEmail,
       passwordHash,
     });
+
+    await tx.insert(payrollTaxConfig).values({ tenantId: tenant.id, taxSlabs: DEFAULT_TAX_SLABS });
 
     const [firstName, ...rest] = input.adminName.trim().split(/\s+/);
     await tx.insert(employees).values({

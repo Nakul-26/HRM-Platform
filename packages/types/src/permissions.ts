@@ -27,6 +27,7 @@ export const PERMISSIONS = [
   "payroll.run",
   "payroll.view",
   "payroll.view_all",
+  "payroll.structure.manage",
   "recruitment.manage",
   "performance.review",
   "performance.review_all",
@@ -55,6 +56,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, readonly Permission[]
     "leave.policy.manage",
     "payroll.run",
     "payroll.view_all",
+    "payroll.structure.manage",
     "recruitment.manage",
     "performance.review_all",
     "audit_log.read",
@@ -67,6 +69,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, readonly Permission[]
     "attendance.request_correction",
     "leave.apply",
     "leave.approve",
+    "payroll.view",
     "performance.review",
   ],
   // `employee.write` (not `_all`) is included here so every employee can
@@ -80,5 +83,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, readonly Permission[]
     "attendance.clock",
     "attendance.request_correction",
     "leave.apply",
+    "payroll.view",
   ],
 };

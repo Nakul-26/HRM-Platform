@@ -163,6 +163,7 @@ describe("attendance-service", () => {
 
   afterAll(async () => {
     const tenantIds = [tenantA.id, tenantB.id];
+    await adminDb.delete(schema.payrollTaxConfig).where(inArray(schema.payrollTaxConfig.tenantId, tenantIds));
     await adminDb.delete(schema.attendanceCorrections).where(inArray(schema.attendanceCorrections.tenantId, tenantIds));
     await adminDb.delete(schema.attendanceRecords).where(inArray(schema.attendanceRecords.tenantId, tenantIds));
     await adminDb.delete(schema.employeeShiftAssignments).where(inArray(schema.employeeShiftAssignments.tenantId, tenantIds));

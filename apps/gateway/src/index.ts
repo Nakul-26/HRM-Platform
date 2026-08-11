@@ -43,6 +43,7 @@ app.route("/api/v1/employees", proxyRouter((env) => env.EMPLOYEE_SERVICE_URL));
 app.route("/api/v1/documents", proxyRouter((env) => env.DOCUMENT_SERVICE_URL));
 app.route("/api/v1/leave", proxyRouter((env) => env.LEAVE_SERVICE_URL));
 app.route("/api/v1/attendance", proxyRouter((env) => env.ATTENDANCE_SERVICE_URL));
+app.route("/api/v1/payroll", proxyRouter((env) => env.PAYROLL_SERVICE_URL));
 
 app.notFound((c) =>
   c.json({ error: { code: "NOT_FOUND", message: "Route not found" }, requestId: c.get("requestId") }, 404),

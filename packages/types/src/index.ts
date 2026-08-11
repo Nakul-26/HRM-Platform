@@ -5,3 +5,4 @@ export * from "./api";
 export * from "./employee";
 export * from "./leave";
 export * from "./attendance";
+export * from "./payroll";

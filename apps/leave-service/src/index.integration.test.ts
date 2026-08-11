@@ -195,6 +195,7 @@ describe("leave-service", () => {
 
   afterAll(async () => {
     const tenantIds = [tenantA.id, tenantB.id];
+    await adminDb.delete(schema.payrollTaxConfig).where(inArray(schema.payrollTaxConfig.tenantId, tenantIds));
     await adminDb.delete(schema.attendanceRecords).where(inArray(schema.attendanceRecords.tenantId, tenantIds));
     await adminDb.delete(schema.leaveRequests).where(inArray(schema.leaveRequests.tenantId, tenantIds));
     await adminDb.delete(schema.leaveBalances).where(inArray(schema.leaveBalances.tenantId, tenantIds));

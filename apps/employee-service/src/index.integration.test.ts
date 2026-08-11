@@ -148,6 +148,7 @@ describe("employee-service", () => {
 
   afterAll(async () => {
     const tenantIds = [tenantA.id, tenantB.id];
+    await adminDb.delete(schema.payrollTaxConfig).where(inArray(schema.payrollTaxConfig.tenantId, tenantIds));
     await adminDb.delete(schema.employeeDocuments).where(inArray(schema.employeeDocuments.tenantId, tenantIds));
     await adminDb.delete(schema.employees).where(inArray(schema.employees.tenantId, tenantIds));
     await adminDb.delete(schema.accounts).where(inArray(schema.accounts.tenantId, tenantIds));

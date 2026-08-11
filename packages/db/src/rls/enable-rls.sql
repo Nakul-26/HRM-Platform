@@ -42,7 +42,7 @@ DECLARE
     'departments', 'branches', 'designations', 'employees', 'employee_documents',
     'shift_templates', 'employee_shift_assignments', 'attendance_records', 'attendance_corrections',
     'leave_types', 'leave_balances', 'leave_requests', 'holiday_calendar',
-    'salary_structures', 'payroll_runs', 'payslips',
+    'pay_component_types', 'payroll_tax_config', 'salary_structures', 'payroll_runs', 'payslips',
     'job_openings', 'candidates', 'interviews',
     'review_cycles', 'goals', 'reviews',
     'notifications'
