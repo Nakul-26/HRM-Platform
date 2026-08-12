@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hrm-performance-service",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": { "port": 8794 },
+  "vars": {
+    "JWT_KID": "default"
+  }
+  // Secrets (JWT_SIGNING_KEY, APP_DATABASE_URL) are set via
+  // `wrangler secret put`, never committed here — see
+  // docs/architecture/06-security.md. No object storage — Performance has
+  // no file-upload surface.
+}

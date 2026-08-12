@@ -18,6 +18,11 @@ const NAV_ITEMS = [
   { href: "/payroll/salary-structures", label: "Salary Structures" },
   { href: "/payroll/tax-config", label: "Payroll Tax Config" },
   { href: "/payroll/runs", label: "Payroll Runs" },
+  { href: "/recruitment/job-openings", label: "Job Openings" },
+  { href: "/recruitment/candidates", label: "Candidates" },
+  { href: "/performance/review-cycles", label: "Review Cycles" },
+  { href: "/performance/reviews", label: "Reviews" },
+  { href: "/performance/promotions", label: "Promotions" },
   { href: "/directory", label: "Directory" },
   { href: "/profile", label: "My Profile" },
 ];

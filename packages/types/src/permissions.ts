@@ -29,8 +29,12 @@ export const PERMISSIONS = [
   "payroll.view_all",
   "payroll.structure.manage",
   "recruitment.manage",
+  "recruitment.interview.conduct",
   "performance.review",
   "performance.review_all",
+  "performance.view",
+  "performance.view_all",
+  "performance.goal.set",
   "tenant.settings.manage",
   "role.manage",
   "audit_log.read",
@@ -59,6 +63,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, readonly Permission[]
     "payroll.structure.manage",
     "recruitment.manage",
     "performance.review_all",
+    "performance.view_all",
+    "performance.goal.set",
     "audit_log.read",
   ],
   manager: [
@@ -70,7 +76,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, readonly Permission[]
     "leave.apply",
     "leave.approve",
     "payroll.view",
+    "recruitment.interview.conduct",
     "performance.review",
+    "performance.view",
+    "performance.goal.set",
   ],
   // `employee.write` (not `_all`) is included here so every employee can
   // edit their own contact details via self-service — `can()` (see
@@ -84,5 +93,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, readonly Permission[]
     "attendance.request_correction",
     "leave.apply",
     "payroll.view",
+    "recruitment.interview.conduct",
+    "performance.view",
+    "performance.goal.set",
   ],
 };

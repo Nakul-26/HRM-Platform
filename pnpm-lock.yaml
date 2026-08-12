@@ -270,6 +270,89 @@ importers:
         specifier: ^3.99.0
         version: 3.114.17(@cloudflare/workers-types@4.20260702.1)
 
+  apps/performance-service:
+    dependencies:
+      '@hrm/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@hrm/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@hrm/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@hrm/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@hrm/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      drizzle-orm:
+        specifier: ^0.38.0
+        version: 0.38.4(@cloudflare/workers-types@4.20260702.1)(@types/react@19.2.18)(kysely@0.29.4)(postgres@3.4.9)(react@19.2.8)
+      hono:
+        specifier: ^4.6.14
+        version: 4.13.0
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20241224.0
+        version: 4.20260702.1
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)(supports-color@7.2.0)
+      wrangler:
+        specifier: ^3.99.0
+        version: 3.114.17(@cloudflare/workers-types@4.20260702.1)
+
+  apps/recruitment-service:
+    dependencies:
+      '@hrm/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@hrm/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@hrm/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@hrm/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@hrm/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      aws4fetch:
+        specifier: ^1.0.20
+        version: 1.0.20
+      drizzle-orm:
+        specifier: ^0.38.0
+        version: 0.38.4(@cloudflare/workers-types@4.20260702.1)(@types/react@19.2.18)(kysely@0.29.4)(postgres@3.4.9)(react@19.2.8)
+      hono:
+        specifier: ^4.6.14
+        version: 4.13.0
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20241224.0
+        version: 4.20260702.1
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)(supports-color@7.2.0)
+      wrangler:
+        specifier: ^3.99.0
+        version: 3.114.17(@cloudflare/workers-types@4.20260702.1)
+
   apps/web:
     dependencies:
       '@hrm/types':

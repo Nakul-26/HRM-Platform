@@ -6,3 +6,5 @@ export * from "./employee";
 export * from "./leave";
 export * from "./attendance";
 export * from "./payroll";
+export * from "./recruitment";
+export * from "./performance";

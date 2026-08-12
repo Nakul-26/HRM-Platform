@@ -43,6 +43,13 @@
       "when": 1786437834260,
       "tag": "0005_odd_ironclad",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786505476148,
+      "tag": "0006_sweet_changeling",
+      "breakpoints": true
     }
   ]
 }

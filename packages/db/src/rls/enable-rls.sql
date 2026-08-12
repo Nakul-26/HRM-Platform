@@ -43,8 +43,8 @@ DECLARE
     'shift_templates', 'employee_shift_assignments', 'attendance_records', 'attendance_corrections',
     'leave_types', 'leave_balances', 'leave_requests', 'holiday_calendar',
     'pay_component_types', 'payroll_tax_config', 'salary_structures', 'payroll_runs', 'payslips',
-    'job_openings', 'candidates', 'interviews',
-    'review_cycles', 'goals', 'reviews',
+    'job_openings', 'candidates', 'interviews', 'offers',
+    'review_cycles', 'goals', 'reviews', 'promotions',
     'notifications'
   ];
 BEGIN
