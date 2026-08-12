@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import { schema, withTenant, type Database } from "@hrm/db";
+import { recordAuditLog, schema, withTenant, type Database } from "@hrm/db";
 import { canUnscoped } from "@hrm/auth";
 import { createPayrollRunSchema, hasPermission, type Payslip } from "@hrm/types";
 import type { Env } from "../env";
@@ -132,7 +132,18 @@ export function runsRouter() {
         .values({ tenantId: auth.tenantId, ...parsed.data })
         .onConflictDoNothing({ target: [payrollRuns.tenantId, payrollRuns.periodMonth, payrollRuns.periodYear] })
         .returning();
-      if (inserted) return inserted;
+      if (inserted) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "payroll_run.triggered",
+          resourceType: "payroll_run",
+          resourceId: inserted.id,
+          after: inserted,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+        return inserted;
+      }
 
       // Already exists for this period — return the existing run rather than a conflict error, so re-posting the same period is a safe no-op at creation time too.
       const [existing] = await tx
@@ -226,6 +237,15 @@ export function runsRouter() {
           .where(eq(payrollRuns.id, id))
           .returning();
         if (!completed) throw new Error("Failed to mark payroll run completed");
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "payroll_run.executed",
+          resourceType: "payroll_run",
+          resourceId: completed.id,
+          after: completed,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
         return { kind: "done" as const, run: completed };
       });
     } catch (err) {

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { loadEnv, baseEnvSchema } from "@hrm/config";
 import { createDbClient, createTenant, schema, type Database } from "@hrm/db";
 import { signAccessToken } from "@hrm/auth";
@@ -173,6 +173,20 @@ describe("employee-service", () => {
 
       const created = await req("POST", "/api/v1/departments", admin, { name: "Engineering" });
       expect(created.status).toBe(201);
+      const { data: dept } = (await created.json()) as { data: { id: string } };
+
+      const createdLogs = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "department.created"),
+            eq(schema.auditLogs.resourceType, "department"),
+            eq(schema.auditLogs.resourceId, dept.id),
+          ),
+        );
+      expect(createdLogs).toHaveLength(1);
 
       const rejected = await req("POST", "/api/v1/departments", noPerm, { name: "Sales" });
       expect(rejected.status).toBe(403);
@@ -199,6 +213,19 @@ describe("employee-service", () => {
 
       const patched = await req("PATCH", `/api/v1/departments/${dept.id}`, admin, { name: "Renamed Dept" });
       expect(patched.status).toBe(200);
+
+      const updatedLogs = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "department.updated"),
+            eq(schema.auditLogs.resourceType, "department"),
+            eq(schema.auditLogs.resourceId, dept.id),
+          ),
+        );
+      expect(updatedLogs).toHaveLength(1);
 
       const deleted = await req("DELETE", `/api/v1/departments/${dept.id}`, admin);
       expect(deleted.status).toBe(204);
@@ -230,6 +257,20 @@ describe("employee-service", () => {
         dateOfJoining: "2024-01-01",
       });
       expect(created.status).toBe(201);
+      const { data: newEmployee } = (await created.json()) as { data: { id: string } };
+
+      const createdLogs = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "employee.created"),
+            eq(schema.auditLogs.resourceType, "employee"),
+            eq(schema.auditLogs.resourceId, newEmployee.id),
+          ),
+        );
+      expect(createdLogs).toHaveLength(1);
 
       const duplicate = await req("POST", "/api/v1/employees", writer, {
         employeeCode: "NEW1",
@@ -294,6 +335,19 @@ describe("employee-service", () => {
       const { data } = (await res.json()) as { data: { phone: string; employeeCode: string } };
       expect(data.phone).toBe("555-0199");
       expect(data.employeeCode).toBe("A-REPORT");
+
+      const updatedLogs = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "employee.updated"),
+            eq(schema.auditLogs.resourceType, "employee"),
+            eq(schema.auditLogs.resourceId, reportEmployeeA.id),
+          ),
+        );
+      expect(updatedLogs).toHaveLength(1);
     });
 
     it("PATCH /me is forbidden without employee.write", async () => {

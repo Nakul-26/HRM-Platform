@@ -188,9 +188,23 @@ describe("attendance-service", () => {
 
       const created = await req("POST", "/api/v1/attendance/shifts", admin, { name: "Evening Shift", startTime: "14:00", endTime: "22:00" });
       expect(created.status).toBe(201);
+      const createdBody = (await created.json()) as { data: { id: string } };
 
       const rejected = await req("POST", "/api/v1/attendance/shifts", noPerm, { name: "Made Up Shift", startTime: "09:00", endTime: "17:00" });
       expect(rejected.status).toBe(403);
+
+      const auditRows = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "shift_template.created"),
+            eq(schema.auditLogs.resourceType, "shift_template"),
+            eq(schema.auditLogs.resourceId, createdBody.data.id),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
     });
 
     it("is listable by any authenticated user without attendance.shift.manage", async () => {
@@ -334,8 +348,21 @@ describe("attendance-service", () => {
         reason: "Forgot to log",
       });
       expect(res.status).toBe(201);
-      const { data } = (await res.json()) as { data: { status: string } };
+      const { data } = (await res.json()) as { data: { id: string; status: string } };
       expect(data.status).toBe("pending");
+
+      const auditRows = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "attendance_correction.requested"),
+            eq(schema.auditLogs.resourceType, "attendance_correction"),
+            eq(schema.auditLogs.resourceId, data.id),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
     });
   });
 
@@ -389,6 +416,19 @@ describe("attendance-service", () => {
       expect(matching[0]?.isCorrected).toBe(true);
       expect(matching[0]?.clockIn).not.toBeNull();
 
+      const approveAuditRows = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "attendance_correction.approved"),
+            eq(schema.auditLogs.resourceType, "attendance_correction"),
+            eq(schema.auditLogs.resourceId, created.id),
+          ),
+        );
+      expect(approveAuditRows).toHaveLength(1);
+
       const reDecide = await req("PATCH", `/api/v1/attendance/corrections/${created.id}/reject`, manager);
       expect(reDecide.status).toBe(409);
     });
@@ -412,6 +452,19 @@ describe("attendance-service", () => {
       const body = (await rejected.json()) as { data: { status: string; decisionNote: string | null } };
       expect(body.data.status).toBe("rejected");
       expect(body.data.decisionNote).toBe("Not enough evidence");
+
+      const rejectAuditRows = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "attendance_correction.rejected"),
+            eq(schema.auditLogs.resourceType, "attendance_correction"),
+            eq(schema.auditLogs.resourceId, created.id),
+          ),
+        );
+      expect(rejectAuditRows).toHaveLength(1);
     });
   });
 

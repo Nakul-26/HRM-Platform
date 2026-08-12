@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { loadEnv, baseEnvSchema } from "@hrm/config";
 import { createDbClient, createTenant, schema, type Database } from "@hrm/db";
 import { signAccessToken } from "@hrm/auth";
@@ -62,6 +62,21 @@ describe("payroll-service", () => {
       init.body = JSON.stringify(body);
     }
     return app.request(path, init, testEnv);
+  }
+
+  async function expectAuditLog(params: { tenantId: string; action: string; resourceType: string; resourceId: string }) {
+    const rows = await adminDb
+      .select()
+      .from(schema.auditLogs)
+      .where(
+        and(
+          eq(schema.auditLogs.tenantId, params.tenantId),
+          eq(schema.auditLogs.action, params.action),
+          eq(schema.auditLogs.resourceType, params.resourceType),
+          eq(schema.auditLogs.resourceId, params.resourceId),
+        ),
+      );
+    expect(rows).toHaveLength(1);
   }
 
   const ALL_PERMISSIONS = [...PERMISSIONS] as Permission[];
@@ -141,6 +156,7 @@ describe("payroll-service", () => {
 
   afterAll(async () => {
     const tenantIds = [tenantA.id, tenantB.id];
+    await adminDb.delete(schema.auditLogs).where(inArray(schema.auditLogs.tenantId, tenantIds));
     await adminDb.delete(schema.payslips).where(inArray(schema.payslips.tenantId, tenantIds));
     await adminDb.delete(schema.payrollRuns).where(inArray(schema.payrollRuns.tenantId, tenantIds));
     await adminDb.delete(schema.salaryStructures).where(inArray(schema.salaryStructures.tenantId, tenantIds));
@@ -172,6 +188,13 @@ describe("payroll-service", () => {
         category: "deduction",
       });
       expect(created.status).toBe(201);
+      const { data: createdComponentType } = (await created.json()) as { data: { id: string } };
+      await expectAuditLog({
+        tenantId: tenantA.id,
+        action: "pay_component_type.created",
+        resourceType: "pay_component_type",
+        resourceId: createdComponentType.id,
+      });
 
       const rejected = await req("POST", "/api/v1/payroll/component-types", noPerm, { code: "bogus", name: "Bogus", category: "earning" });
       expect(rejected.status).toBe(403);
@@ -201,6 +224,12 @@ describe("payroll-service", () => {
       expect(updated.status).toBe(200);
       const { data: updatedData } = (await updated.json()) as { data: { esiWageThreshold: number } };
       expect(updatedData.esiWageThreshold).toBe(25000);
+      await expectAuditLog({
+        tenantId: tenantA.id,
+        action: "tax_config.updated",
+        resourceType: "tax_config",
+        resourceId: tenantA.id,
+      });
 
       // restore, so other tests in this file keep the default threshold
       await req("PATCH", "/api/v1/payroll/tax-config", admin, { esiWageThreshold: 21000 });
@@ -226,6 +255,12 @@ describe("payroll-service", () => {
       });
       expect(created.status).toBe(201);
       const { data: structure } = (await created.json()) as { data: { id: string } };
+      await expectAuditLog({
+        tenantId: tenantA.id,
+        action: "salary_structure.created",
+        resourceType: "salary_structure",
+        resourceId: structure.id,
+      });
 
       const self = authFor({ employeeId: reportEmployeeA.id, permissions: ["payroll.view"] });
       const selfView = await req("GET", `/api/v1/payroll/salary-structures/${structure.id}`, self);
@@ -265,6 +300,13 @@ describe("payroll-service", () => {
 
       const created = await req("POST", "/api/v1/payroll/runs", admin, { periodMonth: 1, periodYear: 2022 });
       expect(created.status).toBe(201);
+      const { data: createdRun } = (await created.json()) as { data: { id: string } };
+      await expectAuditLog({
+        tenantId: tenantA.id,
+        action: "payroll_run.triggered",
+        resourceType: "payroll_run",
+        resourceId: createdRun.id,
+      });
 
       const rejectedList = await req("GET", "/api/v1/payroll/runs", noPerm);
       expect(rejectedList.status).toBe(403);
@@ -313,6 +355,12 @@ describe("payroll-service", () => {
           data: { run: { status: string }; payslips: { employeeId: string; grossEarnings: number; totalDeductions: number; netPay: number; r2ObjectKey: string | null }[] };
         };
         expect(executed.run.status).toBe("completed");
+        await expectAuditLog({
+          tenantId: tenantA.id,
+          action: "payroll_run.executed",
+          resourceType: "payroll_run",
+          resourceId: run.id,
+        });
 
         const payslip = executed.payslips.find((p) => p.employeeId === payEmployeeA.id);
         expect(payslip).toBeDefined();

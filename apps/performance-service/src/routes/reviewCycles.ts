@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { canUnscoped } from "@hrm/auth";
 import { createReviewCycleSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -20,9 +20,19 @@ export function reviewCyclesRouter() {
     const parsed = createReviewCycleSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid review cycle payload", parsed.error.flatten());
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx.insert(reviewCycles).values({ tenantId: auth.tenantId, ...parsed.data }).returning(),
-    );
+    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const rows = await tx.insert(reviewCycles).values({ tenantId: auth.tenantId, ...parsed.data }).returning();
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "review_cycle.created",
+        resourceType: "review_cycle",
+        resourceId: rows[0]?.id ?? null,
+        after: rows[0],
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+      return rows;
+    });
     return ok(c, row, 201);
   });
 
@@ -63,9 +73,24 @@ export function reviewCyclesRouter() {
     if (!canUnscoped(auth, "performance.review_all")) return forbidden(c);
     const id = c.req.param("id");
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx.update(reviewCycles).set({ status: "closed", updatedAt: new Date() }).where(eq(reviewCycles.id, id)).returning(),
-    );
+    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [existing] = await tx.select({ status: reviewCycles.status }).from(reviewCycles).where(eq(reviewCycles.id, id));
+      const wasAlreadyClosed = existing?.status === "closed";
+
+      const rows = await tx.update(reviewCycles).set({ status: "closed", updatedAt: new Date() }).where(eq(reviewCycles.id, id)).returning();
+      if (rows[0] && !wasAlreadyClosed) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "review_cycle.closed",
+          resourceType: "review_cycle",
+          resourceId: rows[0].id,
+          after: rows[0],
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
+      return rows;
+    });
     if (!row) return notFound(c, "Review cycle");
     return ok(c, row);
   });

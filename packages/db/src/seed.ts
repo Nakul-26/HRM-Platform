@@ -37,6 +37,8 @@ const PERMISSION_DESCRIPTIONS: Record<string, string> = {
   "tenant.settings.manage": "Edit tenant-wide settings and branding",
   "role.manage": "Create/edit custom roles",
   "audit_log.read": "View the audit log",
+  "reporting.view": "View aggregate reports for oneself and direct reports",
+  "reporting.view_all": "View aggregate reports for the entire tenant, including payroll summaries",
 };
 
 async function main() {

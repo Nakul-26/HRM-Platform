@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { canUnscoped } from "@hrm/auth";
 import { createPayComponentTypeSchema, updatePayComponentTypeSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -38,9 +38,19 @@ export function componentTypesRouter() {
     const parsed = createPayComponentTypeSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid pay component type payload", parsed.error.flatten());
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx.insert(payComponentTypes).values({ tenantId: auth.tenantId, ...parsed.data }).returning(),
-    );
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [row] = await tx.insert(payComponentTypes).values({ tenantId: auth.tenantId, ...parsed.data }).returning();
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "pay_component_type.created",
+        resourceType: "pay_component_type",
+        resourceId: row?.id ?? null,
+        after: row,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+      return row;
+    });
     return ok(c, row, 201);
   });
 
@@ -53,13 +63,25 @@ export function componentTypesRouter() {
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid pay component type payload", parsed.error.flatten());
     if (Object.keys(parsed.data).length === 0) return fail(c, 400, "VALIDATION_ERROR", "No fields to update");
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [row] = await tx
         .update(payComponentTypes)
         .set({ ...parsed.data, updatedAt: new Date() })
         .where(and(eq(payComponentTypes.id, id), isNull(payComponentTypes.deletedAt)))
-        .returning(),
-    );
+        .returning();
+      if (row) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "pay_component_type.updated",
+          resourceType: "pay_component_type",
+          resourceId: row.id,
+          after: row,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
+      return row;
+    });
     if (!row) return notFound(c, "Pay component type");
     return ok(c, row);
   });
@@ -69,13 +91,25 @@ export function componentTypesRouter() {
     if (!canUnscoped(auth, "payroll.structure.manage")) return forbidden(c);
     const id = c.req.param("id");
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [row] = await tx
         .update(payComponentTypes)
         .set({ deletedAt: new Date() })
         .where(and(eq(payComponentTypes.id, id), isNull(payComponentTypes.deletedAt)))
-        .returning(),
-    );
+        .returning();
+      if (row) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "pay_component_type.deleted",
+          resourceType: "pay_component_type",
+          resourceId: row.id,
+          after: row,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
+      return row;
+    });
     if (!row) return notFound(c, "Pay component type");
     return c.body(null, 204);
   });

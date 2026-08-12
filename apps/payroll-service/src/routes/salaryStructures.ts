@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq, inArray, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { can, canUnscoped } from "@hrm/auth";
 import { createSalaryStructureSchema, hasPermission } from "@hrm/types";
 import type { Env } from "../env";
@@ -36,9 +36,19 @@ export function salaryStructuresRouter() {
     const parsed = createSalaryStructureSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid salary structure payload", parsed.error.flatten());
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx.insert(salaryStructures).values({ tenantId: auth.tenantId, ...parsed.data }).returning(),
-    );
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [row] = await tx.insert(salaryStructures).values({ tenantId: auth.tenantId, ...parsed.data }).returning();
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "salary_structure.created",
+        resourceType: "salary_structure",
+        resourceId: row?.id ?? null,
+        after: row,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+      return row;
+    });
     return ok(c, row, 201);
   });
 

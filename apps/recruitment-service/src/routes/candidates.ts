@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { canUnscoped } from "@hrm/auth";
 import { createCandidateSchema, hireCandidateSchema, updateCandidateSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -35,9 +35,21 @@ export function candidatesRouter() {
     const parsed = createCandidateSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid candidate payload", parsed.error.flatten());
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx.insert(candidates).values({ tenantId: auth.tenantId, ...parsed.data }).returning(),
-    );
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [row] = await tx.insert(candidates).values({ tenantId: auth.tenantId, ...parsed.data }).returning();
+      if (row) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "candidate.created",
+          resourceType: "candidate",
+          resourceId: row.id,
+          after: row,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
+      return row;
+    });
     return ok(c, row, 201);
   });
 
@@ -96,6 +108,17 @@ export function candidatesRouter() {
       if (existing.pipelineStage === "hired") return { kind: "already_hired" as const };
 
       const [row] = await tx.update(candidates).set({ ...parsed.data, updatedAt: new Date() }).where(eq(candidates.id, id)).returning();
+      if (row) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "candidate.updated",
+          resourceType: "candidate",
+          resourceId: row.id,
+          after: row,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
       return { kind: "updated" as const, row };
     });
 
@@ -123,6 +146,17 @@ export function candidatesRouter() {
         const [candidate] = await tx.select().from(candidates).where(eq(candidates.id, id));
         if (!candidate) return { kind: "not_found" as const };
         const hired = await hireCandidate(tx, auth.tenantId, candidate, parsed.data);
+        if (!hired.alreadyHired) {
+          await recordAuditLog(tx, {
+            tenantId: auth.tenantId,
+            actorId: auth.employeeId ?? null,
+            action: "candidate.hired",
+            resourceType: "candidate",
+            resourceId: candidate.id,
+            after: { employeeId: hired.employeeId },
+            ipAddress: c.req.header("cf-connecting-ip") ?? null,
+          });
+        }
         return { kind: "hired" as const, ...hired };
       });
       if (result.kind === "not_found") return notFound(c, "Candidate");
@@ -165,9 +199,21 @@ export function candidatesRouter() {
       return fail(c, 400, "VALIDATION_ERROR", "Invalid or missing objectKey");
     }
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx.update(candidates).set({ resumeR2Key: parsed.data.objectKey, updatedAt: new Date() }).where(eq(candidates.id, id)).returning(),
-    );
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [row] = await tx.update(candidates).set({ resumeR2Key: parsed.data.objectKey, updatedAt: new Date() }).where(eq(candidates.id, id)).returning();
+      if (row) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "candidate.resume_uploaded",
+          resourceType: "candidate",
+          resourceId: row.id,
+          after: { resumeR2Key: row.resumeR2Key },
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
+      return row;
+    });
     if (!row) return notFound(c, "Candidate");
     return ok(c, row);
   });

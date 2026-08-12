@@ -221,9 +221,23 @@ describe("leave-service", () => {
 
       const created = await req("POST", "/api/v1/leave/types", admin, { name: "Casual Leave", isPaid: true });
       expect(created.status).toBe(201);
+      const createdBody = (await created.json()) as { data: { id: string } };
 
       const rejected = await req("POST", "/api/v1/leave/types", noPerm, { name: "Sick Leave" });
       expect(rejected.status).toBe(403);
+
+      const auditRows = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "leave_type.created"),
+            eq(schema.auditLogs.resourceType, "leave_type"),
+            eq(schema.auditLogs.resourceId, createdBody.data.id),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
     });
 
     it("is listable by any authenticated user without leave.policy.manage", async () => {
@@ -292,9 +306,22 @@ describe("leave-service", () => {
         reason: "Personal",
       });
       expect(res.status).toBe(201);
-      const { data } = (await res.json()) as { data: { status: string; days: number } };
+      const { data } = (await res.json()) as { data: { id: string; status: string; days: number } };
       expect(data.status).toBe("pending");
       expect(data.days).toBe(2);
+
+      const auditRows = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "leave.applied"),
+            eq(schema.auditLogs.resourceType, "leave_request"),
+            eq(schema.auditLogs.resourceId, data.id),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
     });
 
     it("rejects a request spanning two different calendar years", async () => {
@@ -331,6 +358,19 @@ describe("leave-service", () => {
 
       const secondCancel = await req("PATCH", `/api/v1/leave/requests/${created.id}/cancel`, owner);
       expect(secondCancel.status).toBe(409);
+
+      const auditRows = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "leave.cancelled"),
+            eq(schema.auditLogs.resourceType, "leave_request"),
+            eq(schema.auditLogs.resourceId, created.id),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
     });
 
     it("forbids a non-owner from cancelling someone else's request", async () => {
@@ -368,6 +408,19 @@ describe("leave-service", () => {
         (b) => b.employeeId === reportEmployeeA.id && b.leaveTypeId === paidLeaveTypeA.id,
       );
       expect(after?.used).toBe((before?.used ?? 0) + created.days);
+
+      const auditRows = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "leave.approved"),
+            eq(schema.auditLogs.resourceType, "leave_request"),
+            eq(schema.auditLogs.resourceId, created.id),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
 
       const reDecide = await req("PATCH", `/api/v1/leave/requests/${created.id}/reject`, manager);
       expect(reDecide.status).toBe(409);
@@ -440,6 +493,19 @@ describe("leave-service", () => {
       const body = (await rejected.json()) as { data: { status: string; decisionNote: string | null; reason: string | null } };
       expect(body.data.status).toBe("rejected");
       expect(body.data.decisionNote).toBe("Team is short-staffed that week");
+
+      const auditRows = await adminDb
+        .select()
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.tenantId, tenantA.id),
+            eq(schema.auditLogs.action, "leave.rejected"),
+            eq(schema.auditLogs.resourceType, "leave_request"),
+            eq(schema.auditLogs.resourceId, created.id),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
     });
   });
 

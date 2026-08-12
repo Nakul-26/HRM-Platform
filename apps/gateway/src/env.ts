@@ -11,4 +11,5 @@ export interface Env extends AuthMiddlewareEnv {
   PAYROLL_SERVICE_URL: string;
   RECRUITMENT_SERVICE_URL: string;
   PERFORMANCE_SERVICE_URL: string;
+  REPORTING_SERVICE_URL: string;
 }

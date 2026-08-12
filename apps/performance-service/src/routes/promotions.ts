@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { inArray, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { canUnscoped } from "@hrm/auth";
 import { createPromotionSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -25,7 +25,25 @@ export function promotionsRouter() {
     const parsed = createPromotionSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid promotion payload", parsed.error.flatten());
 
-    const result = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) => applyPromotion(tx, auth.tenantId, parsed.data));
+    const result = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const outcome = await applyPromotion(tx, auth.tenantId, parsed.data);
+      if (outcome.kind === "applied") {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "promotion.applied",
+          resourceType: "promotion",
+          resourceId: outcome.promotion.id,
+          after: {
+            employeeId: outcome.promotion.employeeId,
+            newDesignationId: outcome.promotion.newDesignationId,
+            previousDesignationId: outcome.promotion.previousDesignationId,
+          },
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
+      return outcome;
+    });
 
     if (result.kind === "review_not_found") return fail(c, 404, "NOT_FOUND", "Review not found.");
     if (result.kind === "review_mismatch") return fail(c, 400, "VALIDATION_ERROR", "The referenced review does not belong to this employee.");

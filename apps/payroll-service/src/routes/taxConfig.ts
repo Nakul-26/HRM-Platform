@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { canUnscoped } from "@hrm/auth";
 import { updatePayrollTaxConfigSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -42,13 +42,25 @@ export function taxConfigRouter() {
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid tax config payload", parsed.error.flatten());
     if (Object.keys(parsed.data).length === 0) return fail(c, 400, "VALIDATION_ERROR", "No fields to update");
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [row] = await tx
         .update(payrollTaxConfig)
         .set({ ...toDbValues(parsed.data), updatedAt: new Date() })
         .where(eq(payrollTaxConfig.tenantId, auth.tenantId))
-        .returning(),
-    );
+        .returning();
+      if (row) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "tax_config.updated",
+          resourceType: "tax_config",
+          resourceId: row.tenantId,
+          after: row,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
+      return row;
+    });
     if (!row) return notFound(c, "Payroll tax config");
     return ok(c, toPayrollTaxConfig(row));
   });

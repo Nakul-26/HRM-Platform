@@ -38,6 +38,8 @@ export const PERMISSIONS = [
   "tenant.settings.manage",
   "role.manage",
   "audit_log.read",
+  "reporting.view",
+  "reporting.view_all",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -66,6 +68,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, readonly Permission[]
     "performance.view_all",
     "performance.goal.set",
     "audit_log.read",
+    "reporting.view_all",
   ],
   manager: [
     "employee.read",
@@ -80,6 +83,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, readonly Permission[]
     "performance.review",
     "performance.view",
     "performance.goal.set",
+    "reporting.view",
   ],
   // `employee.write` (not `_all`) is included here so every employee can
   // edit their own contact details via self-service — `can()` (see

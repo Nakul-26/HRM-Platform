@@ -28,6 +28,7 @@ describe("gateway: signup, login, proxying", () => {
     PAYROLL_SERVICE_URL: "http://payroll-service.test",
     RECRUITMENT_SERVICE_URL: "http://recruitment-service.test",
     PERFORMANCE_SERVICE_URL: "http://performance-service.test",
+    REPORTING_SERVICE_URL: "http://reporting-service.test",
   };
 
   let adminDb: Database;
@@ -306,6 +307,33 @@ describe("gateway: signup, login, proxying", () => {
     expect(res.status).toBe(200);
     const forwardedRequest = fetchSpy.mock.calls[0]?.[0] as Request;
     expect(forwardedRequest.url).toBe("http://performance-service.test/api/v1/performance/goals");
+
+    fetchSpy.mockRestore();
+  });
+
+  it("proxies an authenticated request to the reporting-service with the bearer token intact", async () => {
+    const s = slug("wayne-enterprises");
+    const email = `admin@${s}.test`;
+    await signup({ slug: s, name: "Wayne Enterprises", adminEmail: email, adminName: "Bruce Admin", adminPassword: "i-am-batman-1" });
+    const loginRes = await login(`${s}.${ROOT_DOMAIN}`, { email, password: "i-am-batman-1" });
+    const { data } = (await loginRes.json()) as { data: { token: string } };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: [], requestId: "mock" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const res = await app.request(
+      "/api/v1/reporting/headcount",
+      { headers: { authorization: `Bearer ${data.token}`, host: `${s}.${ROOT_DOMAIN}` } },
+      testEnv,
+    );
+
+    expect(res.status).toBe(200);
+    const forwardedRequest = fetchSpy.mock.calls[0]?.[0] as Request;
+    expect(forwardedRequest.url).toBe("http://reporting-service.test/api/v1/reporting/headcount");
 
     fetchSpy.mockRestore();
   });

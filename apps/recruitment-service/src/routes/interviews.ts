@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { canUnscoped } from "@hrm/auth";
 import { createInterviewSchema, hasPermission, submitInterviewFeedbackSchema, updateInterviewSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -20,12 +20,24 @@ export function interviewsRouter() {
     const parsed = createInterviewSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid interview payload", parsed.error.flatten());
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [row] = await tx
         .insert(interviews)
         .values({ tenantId: auth.tenantId, candidateId: parsed.data.candidateId, interviewerId: parsed.data.interviewerId, scheduledAt: new Date(parsed.data.scheduledAt) })
-        .returning(),
-    );
+        .returning();
+      if (row) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "interview.scheduled",
+          resourceType: "interview",
+          resourceId: row.id,
+          after: row,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
+      return row;
+    });
     return ok(c, row, 201);
   });
 
@@ -122,6 +134,17 @@ export function interviewsRouter() {
         .set({ rating: parsed.data.rating, feedback: parsed.data.feedback, status: "completed", updatedAt: new Date() })
         .where(eq(interviews.id, id))
         .returning();
+      if (row) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "interview.feedback_submitted",
+          resourceType: "interview",
+          resourceId: row.id,
+          after: row,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
       return { kind: "updated" as const, row };
     });
 

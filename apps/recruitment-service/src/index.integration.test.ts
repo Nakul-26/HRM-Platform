@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { loadEnv, baseEnvSchema } from "@hrm/config";
 import { createDbClient, createTenant, schema, type Database } from "@hrm/db";
 import { signAccessToken } from "@hrm/auth";
@@ -122,8 +122,24 @@ describe("recruitment-service", () => {
     jobOpeningA = jobOpening;
   });
 
+  async function countAuditLogs(action: string, resourceType: string, resourceId: string, tenantId = tenantA.id) {
+    const rows = await adminDb
+      .select()
+      .from(schema.auditLogs)
+      .where(
+        and(
+          eq(schema.auditLogs.tenantId, tenantId),
+          eq(schema.auditLogs.action, action),
+          eq(schema.auditLogs.resourceType, resourceType),
+          eq(schema.auditLogs.resourceId, resourceId),
+        ),
+      );
+    return rows.length;
+  }
+
   afterAll(async () => {
     const tenantIds = [tenantA.id, tenantB.id];
+    await adminDb.delete(schema.auditLogs).where(inArray(schema.auditLogs.tenantId, tenantIds));
     await adminDb.delete(schema.interviews).where(inArray(schema.interviews.tenantId, tenantIds));
     await adminDb.delete(schema.offers).where(inArray(schema.offers.tenantId, tenantIds));
     await adminDb.delete(schema.candidates).where(inArray(schema.candidates.tenantId, tenantIds));
@@ -169,12 +185,14 @@ describe("recruitment-service", () => {
       });
       expect(created.status).toBe(201);
       const { data: candidate } = (await created.json()) as { data: { id: string } };
+      expect(await countAuditLogs("candidate.created", "candidate", candidate.id)).toBe(1);
 
       const rejectedStageChange = await req("PATCH", `/api/v1/recruitment/candidates/${candidate.id}`, admin, { pipelineStage: "hired" });
       expect(rejectedStageChange.status).toBe(400);
 
       const validChange = await req("PATCH", `/api/v1/recruitment/candidates/${candidate.id}`, admin, { pipelineStage: "screening" });
       expect(validChange.status).toBe(200);
+      expect(await countAuditLogs("candidate.updated", "candidate", candidate.id)).toBe(1);
     });
 
     it("uploads, records, and downloads a resume via presigned MinIO URLs", async () => {
@@ -198,6 +216,7 @@ describe("recruitment-service", () => {
 
       const recorded = await req("PATCH", `/api/v1/recruitment/candidates/${candidate.id}/resume`, admin, { objectKey: presigned.objectKey });
       expect(recorded.status).toBe(200);
+      expect(await countAuditLogs("candidate.resume_uploaded", "candidate", candidate.id)).toBe(1);
 
       const downloadRes = await req("GET", `/api/v1/recruitment/candidates/${candidate.id}/resume/download-url`, admin);
       expect(downloadRes.status).toBe(200);
@@ -239,6 +258,7 @@ describe("recruitment-service", () => {
       });
       expect(interviewRes.status).toBe(201);
       const { data: interview } = (await interviewRes.json()) as { data: { id: string } };
+      expect(await countAuditLogs("interview.scheduled", "interview", interview.id)).toBe(1);
 
       const unassigned = authFor({ employeeId: otherEmployeeA.id, permissions: ["recruitment.interview.conduct"] });
       const rejected = await req("PATCH", `/api/v1/recruitment/interviews/${interview.id}/feedback`, unassigned, { rating: 4, feedback: "Should not work" });
@@ -250,6 +270,7 @@ describe("recruitment-service", () => {
       const { data: updated } = (await accepted.json()) as { data: { status: string; rating: number } };
       expect(updated.status).toBe("completed");
       expect(updated.rating).toBe(4);
+      expect(await countAuditLogs("interview.feedback_submitted", "interview", interview.id)).toBe(1);
 
       const myInterviews = await req("GET", "/api/v1/recruitment/interviews/me", assigned);
       const { data: mine } = (await myInterviews.json()) as { data: { id: string }[] };
@@ -275,14 +296,17 @@ describe("recruitment-service", () => {
       });
       expect(offerRes.status).toBe(201);
       const { data: offer } = (await offerRes.json()) as { data: { id: string } };
+      expect(await countAuditLogs("offer.created", "offer", offer.id)).toBe(1);
 
       const acceptRes = await req("PATCH", `/api/v1/recruitment/offers/${offer.id}`, admin, { status: "accepted" });
       expect(acceptRes.status).toBe(200);
+      expect(await countAuditLogs("offer.status_updated", "offer", offer.id)).toBe(1);
 
       const hireRes = await req("POST", `/api/v1/recruitment/candidates/${candidate.id}/hire`, admin, { employeeCode: `HIRED-${Date.now()}` });
       expect(hireRes.status).toBe(201);
       const { data: hired } = (await hireRes.json()) as { data: { employeeId: string; alreadyHired: boolean } };
       expect(hired.alreadyHired).toBe(false);
+      expect(await countAuditLogs("candidate.hired", "candidate", candidate.id)).toBe(1);
 
       const [employeeRow] = await adminDb.select().from(schema.employees).where(inArray(schema.employees.id, [hired.employeeId]));
       expect(employeeRow?.firstName).toBe("Hired");
@@ -297,6 +321,8 @@ describe("recruitment-service", () => {
       const { data: rehired } = (await rehireRes.json()) as { data: { employeeId: string; alreadyHired: boolean } };
       expect(rehired.alreadyHired).toBe(true);
       expect(rehired.employeeId).toBe(hired.employeeId);
+      // Idempotent re-hire must not produce a duplicate audit row.
+      expect(await countAuditLogs("candidate.hired", "candidate", candidate.id)).toBe(1);
 
       const employeeRows = await adminDb.select().from(schema.employees).where(inArray(schema.employees.id, [hired.employeeId]));
       expect(employeeRows).toHaveLength(1);

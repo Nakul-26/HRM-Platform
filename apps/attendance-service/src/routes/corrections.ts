@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { schema, withTenant, type Database } from "@hrm/db";
+import { recordAuditLog, schema, withTenant, type Database } from "@hrm/db";
 import { can, canUnscoped } from "@hrm/auth";
 import {
   applyCorrectionSchema,
@@ -138,6 +138,16 @@ async function decide(c: AppContext, targetStatus: "approved" | "rejected") {
       }
     }
 
+    await recordAuditLog(tx, {
+      tenantId: auth.tenantId,
+      actorId: auth.employeeId ?? null,
+      action: targetStatus === "approved" ? "attendance_correction.approved" : "attendance_correction.rejected",
+      resourceType: "attendance_correction",
+      resourceId: row!.id,
+      after: row,
+      ipAddress: c.req.header("cf-connecting-ip") ?? null,
+    });
+
     return { row: row! };
   });
 
@@ -160,8 +170,8 @@ export function correctionsRouter() {
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid correction payload", parsed.error.flatten());
     const { workDate, requestedClockIn, requestedClockOut, requestedStatus, reason } = parsed.data;
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx
+    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const inserted = await tx
         .insert(attendanceCorrections)
         .values({
           tenantId: auth.tenantId,
@@ -173,8 +183,20 @@ export function correctionsRouter() {
           reason: reason ?? null,
           status: "pending",
         })
-        .returning(),
-    );
+        .returning();
+
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "attendance_correction.requested",
+        resourceType: "attendance_correction",
+        resourceId: inserted[0]!.id,
+        after: inserted[0],
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+
+      return inserted;
+    });
     return ok(c, serializeCorrection(row!), 201);
   });
 

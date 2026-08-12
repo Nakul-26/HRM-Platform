@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { canUnscoped } from "@hrm/auth";
 import { createJobOpeningSchema, updateJobOpeningSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -20,9 +20,21 @@ export function jobOpeningsRouter() {
     const parsed = createJobOpeningSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid job opening payload", parsed.error.flatten());
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx.insert(jobOpenings).values({ tenantId: auth.tenantId, ...parsed.data }).returning(),
-    );
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [row] = await tx.insert(jobOpenings).values({ tenantId: auth.tenantId, ...parsed.data }).returning();
+      if (row) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "job_opening.created",
+          resourceType: "job_opening",
+          resourceId: row.id,
+          after: row,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
+      return row;
+    });
     return ok(c, row, 201);
   });
 
@@ -63,9 +75,21 @@ export function jobOpeningsRouter() {
     const parsed = updateJobOpeningSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid job opening payload", parsed.error.flatten());
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx.update(jobOpenings).set({ ...parsed.data, updatedAt: new Date() }).where(eq(jobOpenings.id, id)).returning(),
-    );
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [row] = await tx.update(jobOpenings).set({ ...parsed.data, updatedAt: new Date() }).where(eq(jobOpenings.id, id)).returning();
+      if (row) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "job_opening.updated",
+          resourceType: "job_opening",
+          resourceId: row.id,
+          after: row,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
+      return row;
+    });
     if (!row) return notFound(c, "Job opening");
     return ok(c, row);
   });

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { canUnscoped } from "@hrm/auth";
 import { createBranchSchema, updateBranchSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -47,9 +47,19 @@ export function branchesRouter() {
     const parsed = createBranchSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid branch payload", parsed.error.flatten());
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx.insert(branches).values({ tenantId: auth.tenantId, ...parsed.data }).returning(),
-    );
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [inserted] = await tx.insert(branches).values({ tenantId: auth.tenantId, ...parsed.data }).returning();
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "branch.created",
+        resourceType: "branch",
+        resourceId: inserted?.id ?? null,
+        after: inserted,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+      return inserted;
+    });
     return ok(c, row, 201);
   });
 
@@ -62,13 +72,24 @@ export function branchesRouter() {
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid branch payload", parsed.error.flatten());
     if (Object.keys(parsed.data).length === 0) return fail(c, 400, "VALIDATION_ERROR", "No fields to update");
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [updated] = await tx
         .update(branches)
         .set({ ...parsed.data, updatedAt: new Date() })
         .where(and(eq(branches.id, id), isNull(branches.deletedAt)))
-        .returning(),
-    );
+        .returning();
+      if (!updated) return undefined;
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "branch.updated",
+        resourceType: "branch",
+        resourceId: updated.id,
+        after: updated,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+      return updated;
+    });
     if (!row) return notFound(c, "Branch");
     return ok(c, row);
   });

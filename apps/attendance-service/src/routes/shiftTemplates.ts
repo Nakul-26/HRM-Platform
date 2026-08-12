@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { canUnscoped } from "@hrm/auth";
 import { createShiftTemplateSchema, updateShiftTemplateSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -49,9 +49,21 @@ export function shiftTemplatesRouter() {
     const parsed = createShiftTemplateSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid shift template payload", parsed.error.flatten());
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx.insert(shiftTemplates).values({ tenantId: auth.tenantId, ...parsed.data }).returning(),
-    );
+    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const inserted = await tx.insert(shiftTemplates).values({ tenantId: auth.tenantId, ...parsed.data }).returning();
+
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "shift_template.created",
+        resourceType: "shift_template",
+        resourceId: inserted[0]!.id,
+        after: inserted[0],
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+
+      return inserted;
+    });
     return ok(c, row, 201);
   });
 
@@ -64,13 +76,27 @@ export function shiftTemplatesRouter() {
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid shift template payload", parsed.error.flatten());
     if (Object.keys(parsed.data).length === 0) return fail(c, 400, "VALIDATION_ERROR", "No fields to update");
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx
+    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const updated = await tx
         .update(shiftTemplates)
         .set({ ...parsed.data, updatedAt: new Date() })
         .where(and(eq(shiftTemplates.id, id), isNull(shiftTemplates.deletedAt)))
-        .returning(),
-    );
+        .returning();
+
+      if (updated[0]) {
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "shift_template.updated",
+          resourceType: "shift_template",
+          resourceId: updated[0].id,
+          after: updated[0],
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+      }
+
+      return updated;
+    });
     if (!row) return notFound(c, "Shift template");
     return ok(c, row);
   });

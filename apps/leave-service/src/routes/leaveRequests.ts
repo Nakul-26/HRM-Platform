@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
-import { schema, withTenant, type Database } from "@hrm/db";
+import { recordAuditLog, schema, withTenant, type Database } from "@hrm/db";
 import { can, canUnscoped } from "@hrm/auth";
 import { applyLeaveSchema, hasPermission, leaveDecisionSchema, type AuthContext, type LeaveRequest } from "@hrm/types";
 import type { Env } from "../env";
@@ -149,6 +149,16 @@ async function decide(c: AppContext, targetStatus: "approved" | "rejected") {
       }
     }
 
+    await recordAuditLog(tx, {
+      tenantId: auth.tenantId,
+      actorId: auth.employeeId ?? null,
+      action: targetStatus === "approved" ? "leave.approved" : "leave.rejected",
+      resourceType: "leave_request",
+      resourceId: row!.id,
+      after: row,
+      ipAddress: c.req.header("cf-connecting-ip") ?? null,
+    });
+
     return { row: row! };
   });
 
@@ -223,6 +233,17 @@ export function leaveRequestsRouter() {
           status: "pending",
         })
         .returning();
+
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "leave.applied",
+        resourceType: "leave_request",
+        resourceId: row!.id,
+        after: row,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+
       return { row: row! };
     });
 
@@ -300,6 +321,17 @@ export function leaveRequestsRouter() {
         .set({ status: "cancelled", updatedAt: new Date() })
         .where(eq(leaveRequests.id, id))
         .returning();
+
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "leave.cancelled",
+        resourceType: "leave_request",
+        resourceId: row!.id,
+        after: row,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+
       return { row: row! };
     });
 

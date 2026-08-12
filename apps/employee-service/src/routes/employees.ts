@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq, or, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { can, canUnscoped } from "@hrm/auth";
 import { hasPermission } from "@hrm/types";
 import { createEmployeeDocumentSchema, createEmployeeSchema, updateEmployeeSchema, updateSelfEmployeeSchema } from "@hrm/types";
@@ -78,13 +78,24 @@ export function employeesRouter() {
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid profile payload", parsed.error.flatten());
     if (Object.keys(parsed.data).length === 0) return fail(c, 400, "VALIDATION_ERROR", "No fields to update");
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [updated] = await tx
         .update(employees)
         .set({ ...parsed.data, updatedAt: new Date() })
         .where(eq(employees.id, auth.employeeId as string))
-        .returning(),
-    );
+        .returning();
+      if (!updated) return undefined;
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "employee.updated",
+        resourceType: "employee",
+        resourceId: updated.id,
+        after: updated,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+      return updated;
+    });
     if (!row) return notFound(c, "Employee");
     return ok(c, row);
   });
@@ -147,9 +158,22 @@ export function employeesRouter() {
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid employee payload", parsed.error.flatten());
 
     try {
-      const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-        tx.insert(employees).values({ tenantId: auth.tenantId, status: "active", ...parsed.data }).returning(),
-      );
+      const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+        const [inserted] = await tx
+          .insert(employees)
+          .values({ tenantId: auth.tenantId, status: "active", ...parsed.data })
+          .returning();
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "employee.created",
+          resourceType: "employee",
+          resourceId: inserted?.id ?? null,
+          after: inserted,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+        return inserted;
+      });
       return ok(c, row, 201);
     } catch (err) {
       if (isUniqueViolation(err)) {
@@ -169,13 +193,24 @@ export function employeesRouter() {
     if (Object.keys(parsed.data).length === 0) return fail(c, 400, "VALIDATION_ERROR", "No fields to update");
 
     try {
-      const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-        tx
+      const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+        const [updated] = await tx
           .update(employees)
           .set({ ...parsed.data, updatedAt: new Date() })
           .where(eq(employees.id, id))
-          .returning(),
-      );
+          .returning();
+        if (!updated) return undefined;
+        await recordAuditLog(tx, {
+          tenantId: auth.tenantId,
+          actorId: auth.employeeId ?? null,
+          action: "employee.updated",
+          resourceType: "employee",
+          resourceId: updated.id,
+          after: updated,
+          ipAddress: c.req.header("cf-connecting-ip") ?? null,
+        });
+        return updated;
+      });
       if (!row) return notFound(c, "Employee");
       return ok(c, row);
     } catch (err) {
@@ -248,8 +283,8 @@ export function employeesRouter() {
     const parsed = createEmployeeDocumentSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid document payload", parsed.error.flatten());
 
-    const [row] = await withTenant(db, auth.tenantId, (tx) =>
-      tx
+    const row = await withTenant(db, auth.tenantId, async (tx) => {
+      const [row] = await tx
         .insert(employeeDocuments)
         .values({
           tenantId: auth.tenantId,
@@ -258,8 +293,18 @@ export function employeesRouter() {
           r2ObjectKey: parsed.data.objectKey,
           uploadedBy: auth.employeeId,
         })
-        .returning(),
-    );
+        .returning();
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "document.uploaded",
+        resourceType: "employee_document",
+        resourceId: row?.id ?? null,
+        after: row,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+      return row;
+    });
     return ok(c, row, 201);
   });
 

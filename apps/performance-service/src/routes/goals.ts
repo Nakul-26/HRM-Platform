@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { can, canUnscoped } from "@hrm/auth";
 import { createGoalSchema, updateGoalSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -31,6 +31,15 @@ export function goalsRouter() {
       if (!allowed) return { kind: "forbidden" as const };
 
       const [row] = await tx.insert(goals).values({ tenantId: auth.tenantId, ...parsed.data }).returning();
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "goal.created",
+        resourceType: "goal",
+        resourceId: row?.id ?? null,
+        after: row,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
       return { kind: "created" as const, row };
     });
 
@@ -94,6 +103,15 @@ export function goalsRouter() {
       if (!allowed) return { kind: "forbidden" as const };
 
       const [row] = await tx.update(goals).set({ ...parsed.data, updatedAt: new Date() }).where(eq(goals.id, id)).returning();
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "goal.updated",
+        resourceType: "goal",
+        resourceId: row?.id ?? null,
+        after: row,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
       return { kind: "updated" as const, row };
     });
 

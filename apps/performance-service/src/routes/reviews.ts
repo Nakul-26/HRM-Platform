@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { can } from "@hrm/auth";
 import { createReviewSchema, hasPermission, updateReviewSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -42,6 +42,15 @@ export function reviewsRouter() {
         })
         .returning();
       if (!row) throw new Error("Failed to create review");
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "review.created",
+        resourceType: "review",
+        resourceId: row.id,
+        after: row,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
       return { kind: "created" as const, row };
     });
 
@@ -136,6 +145,15 @@ export function reviewsRouter() {
         .where(eq(reviews.id, id))
         .returning();
       if (!row) throw new Error("Failed to update review");
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "review.updated",
+        resourceType: "review",
+        resourceId: row.id,
+        after: row,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
       return { kind: "updated" as const, row };
     });
 
@@ -158,7 +176,17 @@ export function reviewsRouter() {
       if (existing.status === "submitted") return { kind: "done" as const, row: existing };
 
       const [row] = await tx.update(reviews).set({ status: "submitted", updatedAt: new Date() }).where(eq(reviews.id, id)).returning();
-      return { kind: "done" as const, row: row ?? existing };
+      const finalRow = row ?? existing;
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "review.submitted",
+        resourceType: "review",
+        resourceId: finalRow.id,
+        after: finalRow,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+      return { kind: "done" as const, row: finalRow };
     });
 
     if (result.kind === "not_found") return notFound(c, "Review");

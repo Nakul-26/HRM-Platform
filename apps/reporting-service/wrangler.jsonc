@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hrm-reporting-service",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": { "port": 8795 },
+  "vars": {
+    "JWT_KID": "default"
+  }
+  // Secrets (JWT_SIGNING_KEY, APP_DATABASE_URL) are set via `wrangler secret
+  // put`, never committed here — see docs/architecture/06-security.md. This
+  // service reads the same primary connection every other service uses
+  // (docs/architecture/08-scalability.md's read-replica-for-Reporting stage
+  // hasn't been reached yet); swapping in a replica connection string later
+  // is a one-line change to src/db.ts, not a route rewrite.
+}

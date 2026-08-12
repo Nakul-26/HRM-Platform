@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { href: "/performance/review-cycles", label: "Review Cycles" },
   { href: "/performance/reviews", label: "Reviews" },
   { href: "/performance/promotions", label: "Promotions" },
+  { href: "/audit-log", label: "Audit Log" },
   { href: "/directory", label: "Directory" },
   { href: "/profile", label: "My Profile" },
 ];

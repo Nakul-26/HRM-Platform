@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { schema, withTenant } from "@hrm/db";
+import { recordAuditLog, schema, withTenant } from "@hrm/db";
 import { canUnscoped } from "@hrm/auth";
 import { createDepartmentSchema, updateDepartmentSchema } from "@hrm/types";
 import type { Env } from "../env";
@@ -49,9 +49,19 @@ export function departmentsRouter() {
     const parsed = createDepartmentSchema.safeParse(await c.req.json());
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid department payload", parsed.error.flatten());
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx.insert(departments).values({ tenantId: auth.tenantId, ...parsed.data }).returning(),
-    );
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [inserted] = await tx.insert(departments).values({ tenantId: auth.tenantId, ...parsed.data }).returning();
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "department.created",
+        resourceType: "department",
+        resourceId: inserted?.id ?? null,
+        after: inserted,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+      return inserted;
+    });
     return ok(c, row, 201);
   });
 
@@ -64,13 +74,24 @@ export function departmentsRouter() {
     if (!parsed.success) return fail(c, 400, "VALIDATION_ERROR", "Invalid department payload", parsed.error.flatten());
     if (Object.keys(parsed.data).length === 0) return fail(c, 400, "VALIDATION_ERROR", "No fields to update");
 
-    const [row] = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, (tx) =>
-      tx
+    const row = await withTenant(getDb(c.env.APP_DATABASE_URL), auth.tenantId, async (tx) => {
+      const [updated] = await tx
         .update(departments)
         .set({ ...parsed.data, updatedAt: new Date() })
         .where(and(eq(departments.id, id), isNull(departments.deletedAt)))
-        .returning(),
-    );
+        .returning();
+      if (!updated) return undefined;
+      await recordAuditLog(tx, {
+        tenantId: auth.tenantId,
+        actorId: auth.employeeId ?? null,
+        action: "department.updated",
+        resourceType: "department",
+        resourceId: updated.id,
+        after: updated,
+        ipAddress: c.req.header("cf-connecting-ip") ?? null,
+      });
+      return updated;
+    });
     if (!row) return notFound(c, "Department");
     return ok(c, row);
   });

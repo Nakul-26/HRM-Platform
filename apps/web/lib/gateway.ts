@@ -60,6 +60,20 @@ export async function gatewayFetch<T>(path: string, init: { method?: string; bod
   return request<T>(path, { ...init, slug, token });
 }
 
+/** Fetches a CSV export endpoint (raw text/csv response, not the JSON envelope) — same auth/tenant resolution as gatewayFetch. */
+export async function gatewayFetchCsv(path: string): Promise<{ ok: boolean; text?: string; error?: string }> {
+  const [slug, token] = await Promise.all([getTenantSlug(), getToken()]);
+  const headers: Record<string, string> = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${gatewayOrigin(slug)}${path}`, { headers, cache: "no-store" });
+  if (!res.ok) {
+    const json = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    return { ok: false, error: json?.error?.message ?? "Export failed." };
+  }
+  return { ok: true, text: await res.text() };
+}
+
 /** CSV bulk import takes a raw text/csv body, not JSON — everything else about auth/tenant resolution is identical. */
 export async function importEmployeesCsv(csvText: string): Promise<GatewayResult<{ imported: number }>> {
   const [slug, token] = await Promise.all([getTenantSlug(), getToken()]);

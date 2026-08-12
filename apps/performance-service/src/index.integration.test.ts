@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { loadEnv, baseEnvSchema } from "@hrm/config";
 import { createDbClient, createTenant, schema, type Database } from "@hrm/db";
 import { signAccessToken } from "@hrm/auth";
@@ -59,6 +59,21 @@ describe("performance-service", () => {
       init.body = JSON.stringify(body);
     }
     return app.request(path, init, testEnv);
+  }
+
+  async function auditRowCount(action: string, resourceType: string, resourceId: string): Promise<number> {
+    const rows = await adminDb
+      .select()
+      .from(schema.auditLogs)
+      .where(
+        and(
+          eq(schema.auditLogs.tenantId, tenantA.id),
+          eq(schema.auditLogs.action, action),
+          eq(schema.auditLogs.resourceType, resourceType),
+          eq(schema.auditLogs.resourceId, resourceId),
+        ),
+      );
+    return rows.length;
   }
 
   const ALL_PERMISSIONS = [...PERMISSIONS] as Permission[];
@@ -126,6 +141,7 @@ describe("performance-service", () => {
 
   afterAll(async () => {
     const tenantIds = [tenantA.id, tenantB.id];
+    await adminDb.delete(schema.auditLogs).where(inArray(schema.auditLogs.tenantId, tenantIds));
     await adminDb.delete(schema.promotions).where(inArray(schema.promotions.tenantId, tenantIds));
     await adminDb.delete(schema.reviews).where(inArray(schema.reviews.tenantId, tenantIds));
     await adminDb.delete(schema.goals).where(inArray(schema.goals.tenantId, tenantIds));
@@ -156,6 +172,9 @@ describe("performance-service", () => {
       const rejectedCreate = await req("POST", "/api/v1/performance/review-cycles", noPerm, { name: "Rejected", startDate: "2026-01-01", endDate: "2026-06-30" });
       expect(rejectedCreate.status).toBe(403);
 
+      // reviewCycleA was created via a real POST in beforeAll — confirm it left exactly one audit row.
+      expect(await auditRowCount("review_cycle.created", "review_cycle", reviewCycleA.id)).toBe(1);
+
       const admin = authFor({ employeeId: adminEmployeeA.id, permissions: ["performance.review_all"] });
       const closed = await req("PATCH", `/api/v1/performance/review-cycles/${reviewCycleA.id}/close`, admin);
       expect(closed.status).toBe(200);
@@ -165,6 +184,9 @@ describe("performance-service", () => {
       expect(closedAgain.status).toBe(200);
       const { data: reclosed } = (await closedAgain.json()) as { data: { status: string } };
       expect(reclosed.status).toBe("closed");
+
+      // The second close is a no-op and must not produce a duplicate audit row.
+      expect(await auditRowCount("review_cycle.closed", "review_cycle", reviewCycleA.id)).toBe(1);
     });
   });
 
@@ -173,6 +195,8 @@ describe("performance-service", () => {
       const report = authFor({ employeeId: reportEmployeeA.id, permissions: ["performance.goal.set", "performance.view"] });
       const selfGoal = await req("POST", "/api/v1/performance/goals", report, { employeeId: reportEmployeeA.id, title: "Ship feature X", weight: 40 });
       expect(selfGoal.status).toBe(201);
+      const { data: selfGoalData } = (await selfGoal.json()) as { data: { id: string } };
+      expect(await auditRowCount("goal.created", "goal", selfGoalData.id)).toBe(1);
 
       const manager = authFor({ employeeId: managerEmployeeA.id, permissions: ["performance.review", "performance.view"] });
       const managerSetsReportGoal = await req("POST", "/api/v1/performance/goals", manager, { employeeId: reportEmployeeA.id, title: "Mentor a junior", weight: 20 });
@@ -204,6 +228,7 @@ describe("performance-service", () => {
       expect(created.status).toBe(201);
       const { data: review } = (await created.json()) as { data: { id: string; status: string } };
       expect(review.status).toBe("draft");
+      expect(await auditRowCount("review.created", "review", review.id)).toBe(1);
 
       const report = authFor({ employeeId: reportEmployeeA.id, permissions: ["performance.view"] });
       const myReviewsBeforeSubmit = await req("GET", "/api/v1/performance/reviews/me", report);
@@ -222,6 +247,9 @@ describe("performance-service", () => {
       // Idempotent — re-submitting an already-submitted review is a no-op.
       const resubmitted = await req("PATCH", `/api/v1/performance/reviews/${review.id}/submit`, manager);
       expect(resubmitted.status).toBe(200);
+
+      // The second submit is a no-op and must not produce a duplicate audit row.
+      expect(await auditRowCount("review.submitted", "review", review.id)).toBe(1);
     });
 
     it("rejects an unrelated employee from creating a review for someone else's report", async () => {
@@ -253,9 +281,10 @@ describe("performance-service", () => {
         effectiveDate: "2026-07-01",
       });
       expect(promoted.status).toBe(201);
-      const { data: promotion } = (await promoted.json()) as { data: { previousDesignationId: string | null; newDesignationId: string } };
+      const { data: promotion } = (await promoted.json()) as { data: { id: string; previousDesignationId: string | null; newDesignationId: string } };
       expect(promotion.previousDesignationId).toBe(juniorDesignation.id);
       expect(promotion.newDesignationId).toBe(seniorDesignation.id);
+      expect(await auditRowCount("promotion.applied", "promotion", promotion.id)).toBe(1);
 
       const [employeeRow] = await adminDb.select().from(schema.employees).where(inArray(schema.employees.id, [reportEmployeeA.id]));
       expect(employeeRow?.designationId).toBe(seniorDesignation.id);
