@@ -8,6 +8,11 @@
   "vars": {
     "JWT_KID": "default",
     "ROOT_DOMAIN": "lvh.me",
+    // apps/web runs as a separate process/port from the Gateway in local dev
+    // (Next.js dev server); used only to build the SSO callback's redirect
+    // back into the web app. Empty string in production, where both share
+    // one origin behind a reverse proxy.
+    "WEB_APP_PORT": "3000",
     // Local dev only — apps/web talks to this Gateway, which forwards to
     // these. Not secrets, so safe to commit (docs/architecture/06-security.md).
     "EMPLOYEE_SERVICE_URL": "http://localhost:8788",

@@ -5,6 +5,9 @@ import type { Env } from "./env";
 import { requestId } from "./middleware/requestId";
 import { tenantResolution } from "./middleware/tenant";
 import { authRouter } from "./routes/auth";
+import { mfaRouter } from "./routes/mfa";
+import { ssoRouter } from "./routes/sso";
+import { settingsRouter } from "./routes/settings";
 import { proxyRouter } from "./routes/proxy";
 
 export type { Env };
@@ -24,6 +27,8 @@ app.get("/ready", (c) => c.json({ status: "ok" }));
 // pattern as /health, /ready above). See src/routes/auth.ts for how each
 // resolves what it needs on its own.
 app.route("/api/v1/auth", authRouter());
+app.route("/api/v1/auth/mfa", mfaRouter());
+app.route("/api/v1/auth/sso", ssoRouter());
 
 app.use("*", async (c, next) => tenantResolution(c.env.ROOT_DOMAIN)(c, next));
 app.use("/api/*", async (c, next) => jwtAuth<Env>()(c, next));
@@ -32,6 +37,8 @@ app.get("/api/v1/whoami", (c) => {
   const auth = c.get("auth");
   return c.json({ data: auth, requestId: c.get("requestId") });
 });
+
+app.route("/api/v1/settings", settingsRouter());
 
 // Everything else under /api/v1/* is a plain proxy to the owning downstream
 // service (docs/architecture/01-services-and-communication.md) — the

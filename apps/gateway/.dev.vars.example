@@ -2,3 +2,5 @@
 # never committed (docs/architecture/06-security.md, "Secrets management").
 JWT_SIGNING_KEY=replace-with-a-real-32-plus-character-secret
 APP_DATABASE_URL=postgresql://hrm_app:hrm_app_dev_password@localhost:5432/hrm
+# 32 raw bytes, base64-encoded (AES-256) — e.g. `openssl rand -base64 32`
+APP_ENCRYPTION_KEY=replace-with-a-real-base64-encoded-32-byte-key

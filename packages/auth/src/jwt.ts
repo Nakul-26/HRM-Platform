@@ -34,3 +34,29 @@ export async function verifyAccessToken(token: string, config: JwtConfig): Promi
   const { payload } = await jwtVerify(token, key);
   return payload as unknown as AuthContext;
 }
+
+/**
+ * Short-lived, narrowly-scoped tokens for multi-step auth flows (the MFA
+ * challenge/setup step between password verification and the real access
+ * token, and the OIDC `state` param) — deliberately not a full `AuthContext`,
+ * so a leaked one can't be replayed as a session token. Same signing key/kid
+ * as `signAccessToken`, so no separate secret to manage.
+ */
+export async function signEphemeralToken(
+  payload: JWTPayload,
+  config: JwtConfig,
+  ttlSeconds: number,
+): Promise<string> {
+  const key = new TextEncoder().encode(config.signingKey);
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256", kid: config.kid })
+    .setIssuedAt()
+    .setExpirationTime(`${ttlSeconds}s`)
+    .sign(key);
+}
+
+export async function verifyEphemeralToken<T extends JWTPayload>(token: string, config: JwtConfig): Promise<T> {
+  const key = new TextEncoder().encode(config.signingKey);
+  const { payload } = await jwtVerify(token, key);
+  return payload as unknown as T;
+}

@@ -49,9 +49,46 @@ export function signup(body: unknown) {
   );
 }
 
-/** Login — the tenant is known (the subdomain being visited) but there's no token yet. */
+export type LoginResult =
+  | { token: string; expiresIn: number; mfaRequired?: undefined; mfaSetupRequired?: undefined }
+  | { mfaRequired: true; mfaToken: string }
+  | { mfaSetupRequired: true; mfaToken: string };
+
+/**
+ * Login — the tenant is known (the subdomain being visited) but there's no
+ * token yet. Password verification alone isn't always the end of the story:
+ * if the account has MFA enabled, or the tenant's policy requires it for
+ * this role, the response carries a narrowly-scoped `mfaToken` for the next
+ * step instead of a real access token (apps/gateway/src/routes/auth.ts).
+ */
 export function login(slug: string, body: unknown) {
-  return request<{ token: string; expiresIn: number }>("/api/v1/auth/login", { method: "POST", body, slug });
+  return request<LoginResult>("/api/v1/auth/login", { method: "POST", body, slug });
+}
+
+export function mfaVerify(slug: string, mfaToken: string, code: string) {
+  return request<{ token: string; expiresIn: number }>("/api/v1/auth/mfa/verify", { method: "POST", body: { mfaToken, code }, slug });
+}
+
+export function mfaEnrollStart(slug: string, mfaToken: string) {
+  return request<{ secret: string; otpauthUri: string; backupCodes: string[] }>("/api/v1/auth/mfa/enroll/start", {
+    method: "POST",
+    body: { mfaToken },
+    slug,
+  });
+}
+
+/** When enrollment was forced at login (mfaSetupRequired), confirming also completes login and returns a real token. */
+export function mfaEnrollConfirm(slug: string, mfaToken: string, code: string) {
+  return request<{ token: string; expiresIn: number }>("/api/v1/auth/mfa/enroll/confirm", {
+    method: "POST",
+    body: { mfaToken, code },
+    slug,
+  });
+}
+
+/** Public, unauthenticated — used only to decide whether the login page shows an "SSO" link. */
+export function ssoStatus(slug: string) {
+  return request<{ enabled: boolean }>("/api/v1/auth/sso/status", { slug });
 }
 
 /** Every authenticated call — resolves the current tenant + token from the request context. */

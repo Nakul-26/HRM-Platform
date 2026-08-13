@@ -24,6 +24,7 @@ const NAV_ITEMS = [
   { href: "/performance/reviews", label: "Reviews" },
   { href: "/performance/promotions", label: "Promotions" },
   { href: "/audit-log", label: "Audit Log" },
+  { href: "/sso", label: "SSO & MFA" },
   { href: "/directory", label: "Directory" },
   { href: "/profile", label: "My Profile" },
 ];

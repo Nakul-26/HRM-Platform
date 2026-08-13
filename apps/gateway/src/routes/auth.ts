@@ -1,16 +1,31 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { verifyPassword } from "better-auth/crypto";
 import { createTenant, schema, withTenant, type Database } from "@hrm/db";
-import { signAccessToken } from "@hrm/auth";
+import { signAccessToken, signEphemeralToken } from "@hrm/auth";
 import { createTenantSchema, type AuthContext, type Permission } from "@hrm/types";
 import type { Env } from "../env";
 import { getDb } from "../db";
 import { fail, ok } from "../lib/response";
 import { resolveTenantSlugFromHost } from "../middleware/tenant";
 
-const { accounts, employees, rolePermissions, roles, tenants, users } = schema;
+const { accounts, employees, mfaTotpCredentials, rolePermissions, roles, tenants, tenantSettings, users } = schema;
+
+/**
+ * docs/architecture/06-security.md describes MFA enforcement as "on by
+ * default for Admin/HR Manager roles once shipped" — but forcing every
+ * existing tenant's admin into an MFA-setup detour on their very next login,
+ * with no warning and no settings UI they've ever seen yet, is a hostile
+ * default, not a safe one. This is the *suggested preset* the admin SSO/MFA
+ * settings page pre-selects for a tenant enabling enforcement for the first
+ * time — not the wire default. With no `tenantSettings` row yet (the case
+ * for every tenant until an admin visits that page), enforcement is off
+ * (`parseMfaRequiredRoles` below defaults to `[]`).
+ */
+export const SUGGESTED_MFA_REQUIRED_ROLES = ["admin", "hr_manager"];
+const MFA_CHALLENGE_TTL_SECONDS = 5 * 60;
+const MFA_SETUP_TTL_SECONDS = 10 * 60;
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -70,16 +85,47 @@ export function authRouter() {
       const valid = await verifyPassword({ hash: account.passwordHash, password: parsed.data.password });
       if (!valid) return null;
 
-      return buildAuthContext(tx, tenant.id, user);
+      const auth = await buildAuthContext(tx, tenant.id, user);
+      const [mfaCred] = await tx.select().from(mfaTotpCredentials).where(eq(mfaTotpCredentials.userId, user.id));
+      const [settingsRow] = await tx
+        .select()
+        .from(tenantSettings)
+        .where(and(eq(tenantSettings.tenantId, tenant.id), eq(tenantSettings.key, "mfa_required_roles")));
+
+      return { auth, mfaEnabled: mfaCred?.enabled ?? false, requiredRoles: parseMfaRequiredRoles(settingsRow?.value) };
     });
 
     if (!result) return fail(c, 401, "INVALID_CREDENTIALS", "Incorrect email or password.");
+    const { auth, mfaEnabled, requiredRoles } = result;
+    const jwtConfig = { signingKey: c.env.JWT_SIGNING_KEY, kid: c.env.JWT_KID };
 
-    const token = await signAccessToken(result, { signingKey: c.env.JWT_SIGNING_KEY, kid: c.env.JWT_KID });
-    return ok(c, { token, expiresIn: 15 * 60, auth: result });
+    if (mfaEnabled) {
+      const mfaToken = await signEphemeralToken(
+        { purpose: "mfa", tenantId: auth.tenantId, userId: auth.userId },
+        jwtConfig,
+        MFA_CHALLENGE_TTL_SECONDS,
+      );
+      return ok(c, { mfaRequired: true, mfaToken });
+    }
+    if (requiredRoles.includes(auth.roleName)) {
+      const mfaToken = await signEphemeralToken(
+        { purpose: "mfa_setup", tenantId: auth.tenantId, userId: auth.userId },
+        jwtConfig,
+        MFA_SETUP_TTL_SECONDS,
+      );
+      return ok(c, { mfaSetupRequired: true, mfaToken });
+    }
+
+    const token = await signAccessToken(auth, jwtConfig);
+    return ok(c, { token, expiresIn: 15 * 60, auth });
   });
 
   return app;
+}
+
+function parseMfaRequiredRoles(value: unknown): string[] {
+  if (Array.isArray(value) && value.every((v) => typeof v === "string")) return value;
+  return [];
 }
 
 /** Signup auto-logs the newly-created admin in, since the very next step is the onboarding wizard. */
@@ -93,7 +139,8 @@ async function mintTokenForAdmin(db: Database, tenantId: string, env: Env) {
   return { token, expiresIn: 15 * 60, auth };
 }
 
-async function buildAuthContext(
+/** Shared with routes/mfa.ts and routes/sso.ts, which complete login via a different challenge than a password. */
+export async function buildAuthContext(
   tx: Database,
   tenantId: string,
   user: { id: string; roleId: string; name: string; email: string },

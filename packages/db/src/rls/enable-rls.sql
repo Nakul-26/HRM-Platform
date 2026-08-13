@@ -45,7 +45,8 @@ DECLARE
     'pay_component_types', 'payroll_tax_config', 'salary_structures', 'payroll_runs', 'payslips',
     'job_openings', 'candidates', 'interviews', 'offers',
     'review_cycles', 'goals', 'reviews', 'promotions',
-    'notifications'
+    'notifications',
+    'sso_connections', 'mfa_totp_credentials'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP
